@@ -7,7 +7,7 @@
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.txt)
 [![codecov](https://codecov.io/gh/GeEom/greedytile/branch/master/graph/badge.svg)](https://codecov.io/gh/GeEom/greedytile)
 
-Fast pattern synthesis algorithm preserving local tile constraints. Safe Rust implementation with CLI and library interfaces.
+Fast pattern synthesis preserving local tile constraints. Safe Rust implementation with CLI and library interfaces.
 
 ## Examples
 
@@ -21,10 +21,10 @@ Fast pattern synthesis algorithm preserving local tile constraints. Safe Rust im
 | ![Source F](data/examples/f_4x.png) | ![Result F](data/examples/f_result_4x.png) |
 | ![Source G](data/examples/g_4x.png) | ![Result G](data/examples/g_result_4x.png) |
 
-## Installation & Usage
+## Installation and usage
 
 ```bash
-# Install
+# Install with Rust 1.88.0 or later
 cargo install greedytile
 
 # Generate pattern from source image
@@ -54,13 +54,15 @@ greedytile ./patterns/
 GreedyTile generates patterns by placing 3×3 tiles extracted from a source image. Weights for randomly selecting placement are influenced by several factors:
 
 1. **Entropy weighting**: Prioritizes positions where fewer tile options are valid (similar to [WFC](https://github.com/mxgmn/WaveFunctionCollapse/))
-2. **Distance-based probabilities**: Pixel distance patterns in the source are replicated in the output
-3. **Global balance correction**: If pixels are under-represented then selection is biased towards the source balance
+2. **Global balance correction**: If pixels are under-represented then selection is biased towards the source balance
+3. **Distance-based probabilities**: Pixel distance patterns in the source are replicated in the output
 4. **Deadlock recovery**: If no choices exist which respect tiles, pixels in a local area are removed before continuing
 
 ## Commentary
 
 For efficiency, the global balance correction uses a normal distribution to approximate what should technically be a binomial distribution. The approximation becomes accurate at large counts where it matters most.
+
+The distance probability weighting has more impact on easily tiled patterns than complex ones. Restrictive patterns often have less valid tile choices, making the probabilistic selection less relevant.
 
 ## Limitations
 

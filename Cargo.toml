@@ -2,6 +2,7 @@
 name = "greedytile"
 version = "0.1.4"
 edition = "2024"
+rust-version = "1.88"
 authors = ["David Gathercole"]
 description = "Random greedy pixel pattern generation algorithm"
 homepage = "https://github.com/GeEom/greedytile"
