@@ -65,13 +65,6 @@ impl ProgressManager {
             batch_bar.set_style(BATCH_STYLE.clone());
             self.batch_bar = Some(self.multi_progress.add(batch_bar));
         }
-
-        let bars_to_create = file_count.min(MAX_INDIVIDUAL_PROGRESS_BARS);
-        for _ in 0..bars_to_create {
-            let pb = ProgressBar::new(0);
-            pb.set_style(Self::iteration_style());
-            self.file_bars.push(self.multi_progress.add(pb));
-        }
     }
 
     /// Configure progress bar for a new file
@@ -121,11 +114,12 @@ impl ProgressManager {
     }
 
     /// Update all progress bars to show the last N active files
-    fn update_bars(&self) {
+    fn update_bars(&mut self) {
         // Find the last N files that are in progress or recently completed
         let mut active_files = Vec::new();
         for (i, (name, current, max)) in self.file_states.iter().enumerate() {
-            if !name.is_empty() {
+            // Only consider files that have started processing (current > 0) or are completed
+            if !name.is_empty() && *current > 0 {
                 active_files.push((i, name.clone(), *current, *max));
             }
         }
@@ -135,6 +129,14 @@ impl ProgressManager {
             .len()
             .saturating_sub(MAX_INDIVIDUAL_PROGRESS_BARS);
         let visible_files = active_files.get(start_idx..).unwrap_or(&[]);
+
+        // Create progress bars dynamically as needed - only for active files
+        let needed_bars = visible_files.len().min(MAX_INDIVIDUAL_PROGRESS_BARS);
+        while self.file_bars.len() < needed_bars {
+            let pb = ProgressBar::new(0);
+            pb.set_style(Self::iteration_style());
+            self.file_bars.push(self.multi_progress.add(pb));
+        }
 
         // Update each progress bar
         for (bar_idx, (_file_idx, name, current, max)) in visible_files.iter().enumerate() {

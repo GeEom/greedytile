@@ -11,15 +11,15 @@ Fast pattern synthesis preserving local tile constraints. Safe Rust implementati
 
 ## Examples
 
-| Source | Generated |
-|--------|-----------|
-| ![Source A](data/examples/a_4x.png) | ![Result A](data/examples/a_result_4x.png) |
-| ![Source B](data/examples/b_4x.png) | ![Result B](data/examples/b_result_4x.png) |
-| ![Source C](data/examples/c_4x.png) | ![Result C](data/examples/c_result_4x.png) |
-| ![Source D](data/examples/d_4x.png) | ![Result D](data/examples/d_result_4x.png) |
-| ![Source E](data/examples/e_4x.png) | ![Result E](data/examples/e_result_4x.png) |
-| ![Source F](data/examples/f_4x.png) | ![Result F](data/examples/f_result_4x.png) |
-| ![Source G](data/examples/g_4x.png) | ![Result G](data/examples/g_result_4x.png) |
+| Source | Generated | Visualized |
+|--------|-----------|------------|
+| ![Source A](data/examples/a_4x.png) | ![Result A](data/examples/a_result_4x.png) | ![Vis A](data/examples/a_visualization_4x.gif) |
+| ![Source B](data/examples/b_4x.png) | ![Result B](data/examples/b_result_4x.png) | ![Vis B](data/examples/b_visualization_4x.gif) |
+| ![Source C](data/examples/c_4x.png) | ![Result C](data/examples/c_result_4x.png) | ![Vis C](data/examples/c_visualization_4x.gif) |
+| ![Source D](data/examples/d_4x.png) | ![Result D](data/examples/d_result_4x.png) | ![Vis D](data/examples/d_visualization_4x.gif) |
+| ![Source E](data/examples/e_4x.png) | ![Result E](data/examples/e_result_4x.png) | ![Vis E](data/examples/e_visualization_4x.gif) |
+| ![Source F](data/examples/f_4x.png) | ![Result F](data/examples/f_result_4x.png) | ![Vis F](data/examples/f_visualization_4x.gif) |
+| ![Source G](data/examples/g_4x.png) | ![Result G](data/examples/g_result_4x.png) | ![Vis G](data/examples/g_visualization_4x.gif) |
 
 ## Installation and usage
 
