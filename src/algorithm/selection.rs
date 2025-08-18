@@ -210,7 +210,7 @@ pub fn density_corrected_log_tile_weights(
 
     viable_log_corrected
         .iter()
-        .map(|&log_prob| (log_prob - mean_log_prob))
+        .map(|&log_prob| log_prob - mean_log_prob)
         .collect()
 }
 
