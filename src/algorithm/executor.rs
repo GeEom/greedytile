@@ -484,8 +484,8 @@ impl GreedyStochastic {
         }
 
         // Update generation bounds if necessary
-        if let Some(gen_bounds) = &mut self.grid_state.generation_bounds {
-            if !gen_bounds.contains(min_coords) || !gen_bounds.contains(max_coords) {
+        if let Some(gen_bounds) = &mut self.grid_state.generation_bounds
+            && (!gen_bounds.contains(min_coords) || !gen_bounds.contains(max_coords)) {
                 // Expand bounds to include prefill
                 gen_bounds.min[0] = gen_bounds.min[0].min(min_coords[0]);
                 gen_bounds.min[1] = gen_bounds.min[1].min(min_coords[1]);
@@ -494,7 +494,6 @@ impl GreedyStochastic {
 
                 eprintln!("Warning: Generation bounds expanded to accommodate prefill image");
             }
-        }
 
         self.prefill_data = Some(prefill_data);
         Ok(())

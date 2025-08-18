@@ -88,11 +88,10 @@ pub fn resolve_spatial_deadlock(
         }
 
         // Decrement tally for non-empty tiles (tile_reference 2+ maps to tally index 0+)
-        if tile_reference >= 1 {
-            if let Some(tally) = selection_tally.get_mut(tile_reference as usize - 1) {
+        if tile_reference >= 1
+            && let Some(tally) = selection_tally.get_mut(tile_reference as usize - 1) {
                 *tally = tally.saturating_sub(1);
             }
-        }
 
         // Revert adjacency weights for all affected levels
         let coords = [row as i32 - system_offset[0], col as i32 - system_offset[1]];
@@ -150,13 +149,10 @@ pub fn resolve_spatial_deadlock(
                         && color < grid_state.tile_probabilities.len()
                         && row_index < grid_state.rows()
                         && col_index < grid_state.cols()
-                    {
-                        if let Some(prob_matrix) = grid_state.tile_probabilities.get_mut(color) {
-                            if let Some(prob) = prob_matrix.get_mut([row_index, col_index]) {
+                        && let Some(prob_matrix) = grid_state.tile_probabilities.get_mut(color)
+                            && let Some(prob) = prob_matrix.get_mut([row_index, col_index]) {
                                 *prob /= impact_value;
                             }
-                        }
-                    }
                 }
             }
         }
@@ -217,11 +213,10 @@ pub fn resolve_spatial_deadlock(
                 0.0
             };
 
-            if row < grid_state.rows() && col < grid_state.cols() {
-                if let Some(entropy_val) = grid_state.entropy.get_mut([row, col]) {
+            if row < grid_state.rows() && col < grid_state.cols()
+                && let Some(entropy_val) = grid_state.entropy.get_mut([row, col]) {
                     *entropy_val = entropy;
                 }
-            }
         }
     }
 
@@ -249,13 +244,12 @@ pub fn resolve_spatial_deadlock(
                                 .get([grid_row, grid_col])
                                 .copied()
                                 .unwrap_or(0);
-                            if locked_val > 0 {
-                                if let Some(tile_ref) =
+                            if locked_val > 0
+                                && let Some(tile_ref) =
                                     tile_grid.get_mut(di).and_then(|row| row.get_mut(dj))
                                 {
                                     *tile_ref = (locked_val - 1) as i32;
                                 }
-                            }
                         }
                     }
                 }
@@ -291,11 +285,10 @@ pub fn resolve_spatial_deadlock(
                 }
             }
 
-            if count > 0 {
-                if let Some(feas) = grid_state.feasibility.get_mut([target_row, target_col]) {
+            if count > 0
+                && let Some(feas) = grid_state.feasibility.get_mut([target_row, target_col]) {
                     *feas = feasibility_sum / count as f64;
                 }
-            }
         }
     }
 

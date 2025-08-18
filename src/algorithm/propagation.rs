@@ -102,19 +102,17 @@ pub fn update_probabilities_and_entropy_fused(
 
             for color in 0..grid_state.unique_cell_count {
                 let impact_val = impact.get([color, i, j]).copied().unwrap_or(1.0);
-                if let Some(tile_probs) = grid_state.tile_probabilities.get_mut(color) {
-                    if let Some(prob) = tile_probs.get_mut([row, col]) {
+                if let Some(tile_probs) = grid_state.tile_probabilities.get_mut(color)
+                    && let Some(prob) = tile_probs.get_mut([row, col]) {
                         *prob *= impact_val;
                     }
-                }
             }
 
             for color in 0..grid_state.unique_cell_count {
-                if let Some(tile_probs) = grid_state.tile_probabilities.get(color) {
-                    if let Some(prob) = tile_probs.get([row, col]) {
+                if let Some(tile_probs) = grid_state.tile_probabilities.get(color)
+                    && let Some(prob) = tile_probs.get([row, col]) {
                         sum += prob;
                     }
-                }
             }
 
             // Mean normalization prevents numerical instability in entropy calculation
@@ -218,11 +216,10 @@ pub fn detect_forced_positions(
             let check_pos = [position[0] + di, position[1] + dj];
 
             // Skip positions outside bounds
-            if let Some(bounds) = &grid_state.generation_bounds {
-                if !bounds.contains(check_pos) {
+            if let Some(bounds) = &grid_state.generation_bounds
+                && !bounds.contains(check_pos) {
                     continue;
                 }
-            }
 
             let row = (check_pos[0] + system_offset[0]) as usize;
             let col = (check_pos[1] + system_offset[1]) as usize;
@@ -248,14 +245,13 @@ pub fn detect_forced_positions(
                 cache,
             );
 
-            if viable.len() == 1 {
-                if let Some(&tile_ref) = viable.first() {
+            if viable.len() == 1
+                && let Some(&tile_ref) = viable.first() {
                     forced.push(ForcedPosition {
                         coordinates: check_pos,
                         tile_reference: tile_ref,
                     });
                 }
-            }
         }
     }
 
@@ -383,13 +379,12 @@ pub fn update_feasibility_counts(
                                 .get([grid_row, grid_col])
                                 .copied()
                                 .unwrap_or(0);
-                            if locked_val > 0 {
-                                if let Some(tile_ref) =
+                            if locked_val > 0
+                                && let Some(tile_ref) =
                                     tile_grid.get_mut(di).and_then(|row| row.get_mut(dj))
                                 {
                                     *tile_ref = (locked_val - 1) as i32;
                                 }
-                            }
                         }
                     }
                 }
@@ -429,14 +424,13 @@ pub fn update_feasibility_counts(
                 }
             }
 
-            if count > 0 {
-                if let Some(feas) = grid_state
+            if count > 0
+                && let Some(feas) = grid_state
                     .feasibility
                     .get_mut([target_row + 1, target_col + 1])
                 {
                     *feas = feasibility_sum / count as f64;
                 }
-            }
         }
     }
 }

@@ -97,11 +97,10 @@ pub fn calculate_position_selection(
             let locked_val = grid_state.locked_tiles.get([i, j]).copied().unwrap_or(0);
 
             // Set validity to false for locked positions
-            if locked_val > 1 {
-                if let Some(valid) = validity_matrix.get_mut([i, j]) {
+            if locked_val > 1
+                && let Some(valid) = validity_matrix.get_mut([i, j]) {
                     *valid = false;
                 }
-            }
 
             if adj_val > 0.0 {
                 let weight = adj_val.powi(2);
@@ -218,15 +217,14 @@ pub fn top_k_valid_indices(
                     index: [i, j],
                     value,
                 }));
-            } else if let Some(Reverse(min_elem)) = heap.peek() {
-                if value > min_elem.value {
+            } else if let Some(Reverse(min_elem)) = heap.peek()
+                && value > min_elem.value {
                     heap.pop();
                     heap.push(Reverse(IndexValue {
                         index: [i, j],
                         value,
                     }));
                 }
-            }
         }
     }
 
@@ -249,15 +247,14 @@ pub fn top_k_from_indices(
                 index: [i, j],
                 value,
             }));
-        } else if let Some(Reverse(min_elem)) = heap.peek() {
-            if value > min_elem.value {
+        } else if let Some(Reverse(min_elem)) = heap.peek()
+            && value > min_elem.value {
                 heap.pop();
                 heap.push(Reverse(IndexValue {
                     index: [i, j],
                     value,
                 }));
             }
-        }
     }
 
     heap.into_iter().map(|Reverse(iv)| iv.index).collect()

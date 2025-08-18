@@ -1,6 +1,6 @@
 [package]
 name = "greedytile"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 rust-version = "1.88"
 authors = ["David Gathercole"]

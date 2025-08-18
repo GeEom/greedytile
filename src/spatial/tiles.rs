@@ -92,11 +92,10 @@ impl TileExtractor {
         let mut rotated = [[0; 3]; 3];
         for (i, row) in rotated.iter_mut().enumerate().take(n) {
             for (j, cell) in row.iter_mut().enumerate().take(n) {
-                if let Some(tile_row) = tile.get(n - 1 - j) {
-                    if let Some(&val) = tile_row.get(i) {
+                if let Some(tile_row) = tile.get(n - 1 - j)
+                    && let Some(&val) = tile_row.get(i) {
                         *cell = val;
                     }
-                }
             }
         }
         rotated
@@ -107,13 +106,11 @@ impl TileExtractor {
         let mut reflected = [[0; 3]; 3];
         for i in 0..n {
             for j in 0..n {
-                if let Some(row) = tile.get(i) {
-                    if let Some(&val) = row.get(n - 1 - j) {
-                        if let Some(ref_cell) = reflected.get_mut(i).and_then(|r| r.get_mut(j)) {
+                if let Some(row) = tile.get(i)
+                    && let Some(&val) = row.get(n - 1 - j)
+                        && let Some(ref_cell) = reflected.get_mut(i).and_then(|r| r.get_mut(j)) {
                             *ref_cell = val;
                         }
-                    }
-                }
             }
         }
         reflected

@@ -11,15 +11,12 @@ mod tests {
         let mut rotated = [[0; 3]; 3];
         for i in 0..n {
             for j in 0..n {
-                if let Some(row) = tile.get(n - 1 - j) {
-                    if let Some(&val) = row.get(i) {
-                        if let Some(rot_row) = rotated.get_mut(i) {
-                            if let Some(rot_val) = rot_row.get_mut(j) {
+                if let Some(row) = tile.get(n - 1 - j)
+                    && let Some(&val) = row.get(i)
+                        && let Some(rot_row) = rotated.get_mut(i)
+                            && let Some(rot_val) = rot_row.get_mut(j) {
                                 *rot_val = val;
                             }
-                        }
-                    }
-                }
             }
         }
         rotated
@@ -30,15 +27,12 @@ mod tests {
         let mut reflected = [[0; 3]; 3];
         for i in 0..n {
             for j in 0..n {
-                if let Some(row) = tile.get(i) {
-                    if let Some(&val) = row.get(n - 1 - j) {
-                        if let Some(ref_row) = reflected.get_mut(i) {
-                            if let Some(ref_val) = ref_row.get_mut(j) {
+                if let Some(row) = tile.get(i)
+                    && let Some(&val) = row.get(n - 1 - j)
+                        && let Some(ref_row) = reflected.get_mut(i)
+                            && let Some(ref_val) = ref_row.get_mut(j) {
                                 *ref_val = val;
                             }
-                        }
-                    }
-                }
             }
         }
         reflected

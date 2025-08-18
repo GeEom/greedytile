@@ -142,13 +142,11 @@ fn find_compatible_values_at_offset_bitset(
                         )
                     });
 
-            if matches {
-                if let Some(row) = source_tile.get(target_row) {
-                    if let Some(&val) = row.get(target_col) {
+            if matches
+                && let Some(row) = source_tile.get(target_row)
+                    && let Some(&val) = row.get(target_col) {
                         result.insert(val);
                     }
-                }
-            }
         }
     }
 

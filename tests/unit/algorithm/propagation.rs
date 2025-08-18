@@ -64,11 +64,10 @@ mod tests {
         for row in 0..3 {
             for col in 0..3 {
                 for color in 0..2 {
-                    if let Some(prob) = grid_state.tile_probabilities.get_mut(color) {
-                        if let Some(val) = prob.get_mut([row, col]) {
+                    if let Some(prob) = grid_state.tile_probabilities.get_mut(color)
+                        && let Some(val) = prob.get_mut([row, col]) {
                             *val = 1.0;
                         }
-                    }
                 }
                 if let Some(val) = grid_state.entropy.get_mut([row, col]) {
                     *val = 0.0;
@@ -136,21 +135,18 @@ mod tests {
 
         for row in 0..5 {
             for col in 0..5 {
-                if let Some(prob) = grid_state.tile_probabilities.get_mut(0) {
-                    if let Some(val) = prob.get_mut([row, col]) {
+                if let Some(prob) = grid_state.tile_probabilities.get_mut(0)
+                    && let Some(val) = prob.get_mut([row, col]) {
                         *val = 0.8;
                     }
-                }
-                if let Some(prob) = grid_state.tile_probabilities.get_mut(1) {
-                    if let Some(val) = prob.get_mut([row, col]) {
+                if let Some(prob) = grid_state.tile_probabilities.get_mut(1)
+                    && let Some(val) = prob.get_mut([row, col]) {
                         *val = 1.2;
                     }
-                }
-                if let Some(prob) = grid_state.tile_probabilities.get_mut(2) {
-                    if let Some(val) = prob.get_mut([row, col]) {
+                if let Some(prob) = grid_state.tile_probabilities.get_mut(2)
+                    && let Some(val) = prob.get_mut([row, col]) {
                         *val = 0.6;
                     }
-                }
                 if let Some(val) = grid_state.entropy.get_mut([row, col]) {
                     *val = 0.0;
                 }
@@ -260,16 +256,14 @@ mod tests {
 
         for row in 0..3 {
             for col in 0..3 {
-                if let Some(prob) = grid_state.tile_probabilities.get_mut(0) {
-                    if let Some(val) = prob.get_mut([row, col]) {
+                if let Some(prob) = grid_state.tile_probabilities.get_mut(0)
+                    && let Some(val) = prob.get_mut([row, col]) {
                         *val = 1e-20;
                     }
-                }
-                if let Some(prob) = grid_state.tile_probabilities.get_mut(1) {
-                    if let Some(val) = prob.get_mut([row, col]) {
+                if let Some(prob) = grid_state.tile_probabilities.get_mut(1)
+                    && let Some(val) = prob.get_mut([row, col]) {
                         *val = 1e-20;
                     }
-                }
                 if let Some(val) = grid_state.entropy.get_mut([row, col]) {
                     *val = 0.0;
                 }

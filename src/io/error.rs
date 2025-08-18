@@ -182,11 +182,10 @@ where
         self.map_err(|e| {
             let mut error = e.into();
             // Only certain error types benefit from positional context
-            if let AlgorithmError::NoValidPositions { iteration, .. } = &mut error {
-                if let Some(iter) = context.iteration {
+            if let AlgorithmError::NoValidPositions { iteration, .. } = &mut error
+                && let Some(iter) = context.iteration {
                     *iteration = iter;
                 }
-            }
             error
         })
     }

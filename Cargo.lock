@@ -527,7 +527,7 @@ dependencies = [
 
 [[package]]
 name = "greedytile"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "bitvec",
  "clap",

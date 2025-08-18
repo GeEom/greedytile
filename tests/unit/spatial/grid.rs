@@ -78,16 +78,14 @@ mod tests {
         if let Some(val) = grid.adjacency_weights.get_mut([2, 0]) {
             *val = 3;
         }
-        if let Some(prob) = grid.tile_probabilities.get_mut(0) {
-            if let Some(val) = prob.get_mut([1, 2]) {
+        if let Some(prob) = grid.tile_probabilities.get_mut(0)
+            && let Some(val) = prob.get_mut([1, 2]) {
                 *val = 0.7;
             }
-        }
-        if let Some(prob) = grid.tile_probabilities.get_mut(1) {
-            if let Some(val) = prob.get_mut([2, 1]) {
+        if let Some(prob) = grid.tile_probabilities.get_mut(1)
+            && let Some(val) = prob.get_mut([2, 1]) {
                 *val = 0.3;
             }
-        }
         if let Some(val) = grid.feasibility.get_mut([0, 0]) {
             *val = 0.9;
         }

@@ -97,11 +97,10 @@ impl FeasibilityCountLayer {
         let mut new_counts = Array2::from_elem((new_rows, new_cols), self.tile_count);
         for i in 0..self.counts.nrows().min(new_rows) {
             for j in 0..self.counts.ncols().min(new_cols) {
-                if let Some(count) = self.counts.get([i, j]).copied() {
-                    if let Some(new_count) = new_counts.get_mut([i, j]) {
+                if let Some(count) = self.counts.get([i, j]).copied()
+                    && let Some(new_count) = new_counts.get_mut([i, j]) {
                         *new_count = count;
                     }
-                }
             }
         }
         self.counts = new_counts;
