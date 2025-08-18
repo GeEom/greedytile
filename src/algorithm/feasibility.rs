@@ -98,9 +98,10 @@ impl FeasibilityCountLayer {
         for i in 0..self.counts.nrows().min(new_rows) {
             for j in 0..self.counts.ncols().min(new_cols) {
                 if let Some(count) = self.counts.get([i, j]).copied()
-                    && let Some(new_count) = new_counts.get_mut([i, j]) {
-                        *new_count = count;
-                    }
+                    && let Some(new_count) = new_counts.get_mut([i, j])
+                {
+                    *new_count = count;
+                }
             }
         }
         self.counts = new_counts;

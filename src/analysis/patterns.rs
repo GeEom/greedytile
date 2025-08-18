@@ -89,18 +89,20 @@ impl ImageProcessor {
                 ];
                 let color_bytes = color_to_bytes(&color);
                 if let Some(&mapping) = color_mapping.get(&color_bytes)
-                    && let Some(data) = source_data.get_mut((i, j)) {
-                        *data = mapping;
-                    }
+                    && let Some(data) = source_data.get_mut((i, j))
+                {
+                    *data = mapping;
+                }
             }
         }
 
         let mut counts = vec![0usize; unique_colors_bytes.len()];
         for &val in &source_data {
             if val > 0
-                && let Some(count) = counts.get_mut(val - 1) {
-                    *count += 1;
-                }
+                && let Some(count) = counts.get_mut(val - 1)
+            {
+                *count += 1;
+            }
         }
 
         let total: usize = counts.iter().sum();

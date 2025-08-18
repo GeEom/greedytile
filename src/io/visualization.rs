@@ -202,9 +202,10 @@ impl VisualizationCapture {
 
             if grid_row < rows && grid_col < cols {
                 if let Some(row) = grid.get_mut(grid_row)
-                    && let Some(cell) = row.get_mut(grid_col) {
-                        *cell = placement.tile_ref.unwrap_or(0);
-                    }
+                    && let Some(cell) = row.get_mut(grid_col)
+                {
+                    *cell = placement.tile_ref.unwrap_or(0);
+                }
 
                 frame_count += 1;
 

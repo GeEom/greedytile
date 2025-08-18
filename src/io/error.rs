@@ -183,9 +183,10 @@ where
             let mut error = e.into();
             // Only certain error types benefit from positional context
             if let AlgorithmError::NoValidPositions { iteration, .. } = &mut error
-                && let Some(iter) = context.iteration {
-                    *iteration = iter;
-                }
+                && let Some(iter) = context.iteration
+            {
+                *iteration = iter;
+            }
             error
         })
     }

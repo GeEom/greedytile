@@ -60,14 +60,16 @@ impl AnalysisCapture {
 
         // Cells are 1 indexed, conversion to 0 index for the color lookup here
         for (tile_idx, &prob) in probabilities.iter().enumerate() {
-            if prob > 0.0 && tile_idx > 0
-                && let Some(color) = self.color_mapping.get(tile_idx - 1) {
-                    weighted_r += color[0] as f64 * prob;
-                    weighted_g += color[1] as f64 * prob;
-                    weighted_b += color[2] as f64 * prob;
-                    weighted_a += color[3] as f64 * prob;
-                    total_weight += prob;
-                }
+            if prob > 0.0
+                && tile_idx > 0
+                && let Some(color) = self.color_mapping.get(tile_idx - 1)
+            {
+                weighted_r += color[0] as f64 * prob;
+                weighted_g += color[1] as f64 * prob;
+                weighted_b += color[2] as f64 * prob;
+                weighted_a += color[3] as f64 * prob;
+                total_weight += prob;
+            }
         }
 
         if total_weight > 0.0 {
@@ -117,9 +119,10 @@ impl AnalysisCapture {
                 let mut probs = vec![0.0; grid_state.unique_cell_count + 1];
                 for (i, prob_matrix) in grid_state.tile_probabilities.iter().enumerate() {
                     if let Some(prob_value) = prob_matrix.get([row, col])
-                        && let Some(prob_slot) = probs.get_mut(i + 1) {
-                            *prob_slot = *prob_value;
-                        }
+                        && let Some(prob_slot) = probs.get_mut(i + 1)
+                    {
+                        *prob_slot = *prob_value;
+                    }
                 }
                 let weighted_color = self.calculate_weighted_color(&probs);
 
@@ -185,9 +188,10 @@ impl AnalysisCapture {
                 let row_idx = (event.row - min_row) as usize;
                 let col_idx = (event.col - min_col) as usize;
                 if let Some(row) = grid.get_mut(row_idx)
-                    && let Some(cell) = row.get_mut(col_idx) {
-                        *cell = event.entropy;
-                    }
+                    && let Some(cell) = row.get_mut(col_idx)
+                {
+                    *cell = event.entropy;
+                }
             }
         }
 
@@ -207,9 +211,10 @@ impl AnalysisCapture {
                 let row_idx = (event.row - min_row) as usize;
                 let col_idx = (event.col - min_col) as usize;
                 if let Some(row) = grid.get_mut(row_idx)
-                    && let Some(cell) = row.get_mut(col_idx) {
-                        *cell = event.feasibility;
-                    }
+                    && let Some(cell) = row.get_mut(col_idx)
+                {
+                    *cell = event.feasibility;
+                }
             }
         }
 
@@ -246,9 +251,10 @@ impl AnalysisCapture {
                 let row_idx = (event.row - min_row) as usize;
                 let col_idx = (event.col - min_col) as usize;
                 if let Some(row) = grid.get_mut(row_idx)
-                    && let Some(cell) = row.get_mut(col_idx) {
-                        *cell = event.weighted_color;
-                    }
+                    && let Some(cell) = row.get_mut(col_idx)
+                {
+                    *cell = event.weighted_color;
+                }
             }
         }
 
@@ -284,9 +290,10 @@ impl AnalysisCapture {
                 let pixel_idx = (row * total_width + col) * 4;
                 if let Some(grid_row) = weighted_color_grid.get(row)
                     && let Some(color) = grid_row.get(col)
-                        && let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4) {
-                            pixel_slice.copy_from_slice(color);
-                        }
+                    && let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4)
+                {
+                    pixel_slice.copy_from_slice(color);
+                }
             }
         }
 
@@ -299,9 +306,10 @@ impl AnalysisCapture {
                 if let Some(&tile_idx) = tile_grid.get(&(abs_row, abs_col)) {
                     if tile_idx > 1
                         && let Some(color) = self.color_mapping.get(tile_idx - 2)
-                            && let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4) {
-                                pixel_slice.copy_from_slice(color);
-                            }
+                        && let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4)
+                    {
+                        pixel_slice.copy_from_slice(color);
+                    }
                 } else if let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4) {
                     pixel_slice.copy_from_slice(&[0, 0, 0, 255]);
                 }
@@ -312,16 +320,17 @@ impl AnalysisCapture {
             for col in 0..grid_cols {
                 let pixel_idx = ((row + grid_rows + padding) * total_width + col) * 4;
                 if let Some(grid_row) = entropy_grid.get(row)
-                    && let Some(&entropy) = grid_row.get(col) {
-                        let normalized = if max_entropy > 0.0 {
-                            (entropy / max_entropy * 255.0) as u8
-                        } else {
-                            0
-                        };
-                        if let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4) {
-                            pixel_slice.copy_from_slice(&[normalized, normalized, normalized, 255]);
-                        }
+                    && let Some(&entropy) = grid_row.get(col)
+                {
+                    let normalized = if max_entropy > 0.0 {
+                        (entropy / max_entropy * 255.0) as u8
+                    } else {
+                        0
+                    };
+                    if let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4) {
+                        pixel_slice.copy_from_slice(&[normalized, normalized, normalized, 255]);
                     }
+                }
             }
         }
 
@@ -330,12 +339,13 @@ impl AnalysisCapture {
                 let pixel_idx =
                     ((row + grid_rows + padding) * total_width + col + grid_cols + padding) * 4;
                 if let Some(grid_row) = feasibility_grid.get(row)
-                    && let Some(&feasibility) = grid_row.get(col) {
-                        let normalized = (feasibility * 255.0) as u8;
-                        if let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4) {
-                            pixel_slice.copy_from_slice(&[normalized, normalized, normalized, 255]);
-                        }
+                    && let Some(&feasibility) = grid_row.get(col)
+                {
+                    let normalized = (feasibility * 255.0) as u8;
+                    if let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4) {
+                        pixel_slice.copy_from_slice(&[normalized, normalized, normalized, 255]);
                     }
+                }
             }
         }
 
