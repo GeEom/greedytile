@@ -5,7 +5,7 @@
 [![Rust](https://github.com/GeEom/greedytile/actions/workflows/rust.yml/badge.svg)](https://github.com/GeEom/greedytile/actions/workflows/rust.yml)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.txt)
-[![codecov](https://codecov.io/gh/GeEom/greedytile/branch/master/graph/badge.svg)](https://codecov.io/gh/GeEom/greedytile)
+[![codecov](https://codecov.io/gh/GeEom/greedytile/branch/main/graph/badge.svg)](https://codecov.io/gh/GeEom/greedytile)
 
 Fast pattern synthesis preserving local tile constraints. Safe Rust implementation with CLI and library interfaces.
 

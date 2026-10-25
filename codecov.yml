@@ -14,7 +14,6 @@ coverage:
         base: auto
         branches:
           - main
-          - master
         if_ci_failed: error
     patch:
       default:
