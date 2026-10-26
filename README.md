@@ -58,10 +58,6 @@ GreedyTile generates patterns by placing 3×3 tiles extracted from a source imag
 3. **Distance-based probabilities**: Pixel distance patterns in the source are replicated in the output
 4. **Deadlock recovery**: If no choices exist which respect tiles, pixels in a local area are removed before continuing
 
-## Commentary
-
-For efficiency, the global balance correction uses a normal distribution to approximate what should technically be a binomial distribution. The approximation becomes accurate at large counts where it matters most.
-
 ## Limitations
 
 - **Fixed tile size**: Currently hardcoded to sample 3×3 pixel tiles from the source
