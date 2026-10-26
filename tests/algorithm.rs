@@ -64,9 +64,8 @@ fn test_cache_behavior() {
     assert_eq!(cache.stats.hits, 0);
 
     let result2_vec = {
-        let result2 = cache.get_or_compute_pattern(key, || {
-            unreachable!("Should not compute again!");
-        });
+        // A recomputation would return this empty set instead of the cached one
+        let result2 = cache.get_or_compute_pattern(key, || TileBitset::new(10));
         result2.to_vec()
     };
 

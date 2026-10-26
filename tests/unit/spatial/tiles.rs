@@ -43,15 +43,14 @@ mod tests {
     // Tests tile extraction with rotations and reflections producing expected counts
     // Verified by disabling rotation addition
     #[test]
-    fn test_tile_transformations() {
+    fn test_tile_transformations() -> crate::TestResult {
         let source_data = Array2::from_shape_vec(
             (5, 5),
             vec![
                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
                 24, 25,
             ],
-        )
-        .unwrap();
+        )?;
 
         let extractor_base = TileExtractor::extract_tiles(&source_data, 3, false, false);
         let base_tiles = extractor_base.source_tiles();
@@ -104,17 +103,18 @@ mod tests {
                 }
             }
         }
+        Ok(())
     }
 
     // Tests 90-degree rotation produces correct mapping
     // Verified by returning unchanged tile
     #[test]
-    fn test_rotate_90_correctness() {
+    fn test_rotate_90_correctness() -> crate::TestResult {
         let test_tile: Tile = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
 
         let expected_rot90: Tile = [[7, 4, 1], [8, 5, 2], [9, 6, 3]];
 
-        let source_data = Array2::from_shape_vec((3, 3), vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
+        let source_data = Array2::from_shape_vec((3, 3), vec![1, 2, 3, 4, 5, 6, 7, 8, 9])?;
 
         let extractor = TileExtractor::extract_tiles(&source_data, 3, true, false);
         let tiles = extractor.source_tiles();
@@ -153,12 +153,13 @@ mod tests {
         assert!(tiles.contains(&rot90), "90° rotation should be present");
         assert!(tiles.contains(&rot180), "180° rotation should be present");
         assert!(tiles.contains(&rot270), "270° rotation should be present");
+        Ok(())
     }
 
     // Tests detection of rotation formula bug (using j,i instead of n-1-j,i)
     // Verified by using incorrect formula
     #[test]
-    fn test_rotate_90_bug_detection() {
+    fn test_rotate_90_bug_detection() -> crate::TestResult {
         let expected_correct: Tile = [[0, 0, 1], [0, 0, 0], [0, 0, 0]];
 
         let buggy_result: Tile = [[1, 0, 0], [0, 0, 0], [0, 0, 0]];
@@ -168,7 +169,7 @@ mod tests {
             "Bug detection pattern: correct and buggy results should differ"
         );
 
-        let source_data = Array2::from_shape_vec((3, 3), vec![1, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap();
+        let source_data = Array2::from_shape_vec((3, 3), vec![1, 0, 0, 0, 0, 0, 0, 0, 0])?;
         let extractor = TileExtractor::extract_tiles(&source_data, 3, true, false);
         let tiles = extractor.source_tiles();
 
@@ -181,12 +182,13 @@ mod tests {
             tiles.iter().filter(|&&tile| tile == buggy_result).count() <= 1,
             "Found buggy rotation result multiple times. The rotation formula is incorrect!"
         );
+        Ok(())
     }
 
     // Tests horizontal reflection produces correct mapping
     // Verified by returning unchanged tile
     #[test]
-    fn test_reflection_correctness() {
+    fn test_reflection_correctness() -> crate::TestResult {
         let test_tile: Tile = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
 
         let expected_reflected: Tile = [[3, 2, 1], [6, 5, 4], [9, 8, 7]];
@@ -203,7 +205,7 @@ mod tests {
             "Double reflection should return to original"
         );
 
-        let source_data = Array2::from_shape_vec((3, 3), vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
+        let source_data = Array2::from_shape_vec((3, 3), vec![1, 2, 3, 4, 5, 6, 7, 8, 9])?;
         let extractor = TileExtractor::extract_tiles(&source_data, 3, false, true);
         let tiles = extractor.source_tiles();
 
@@ -211,5 +213,6 @@ mod tests {
             tiles.contains(&expected_reflected),
             "Reflected tile not found in extracted tiles"
         );
+        Ok(())
     }
 }

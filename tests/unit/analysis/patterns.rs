@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use greedytile::analysis::patterns::ImageProcessor;
+    use greedytile::math::convert::{f64_to_usize_saturating, usize_to_f64};
     use ndarray::Array3;
 
     // Tests exact ratio calculation for Red (2 pixels), Green (3 pixels), Blue (4 pixels) verifying correct denominator and exact ratios
@@ -11,61 +12,24 @@ mod tests {
     fn test_color_mapping_and_ratios() {
         let mut image_data = Array3::<f64>::zeros((3, 3, 4));
 
-        if let Some(val) = image_data.get_mut((0, 0, 0)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((0, 0, 3)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((1, 1, 0)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((1, 1, 3)) {
-            *val = 1.0;
-        }
-
-        if let Some(val) = image_data.get_mut((0, 1, 1)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((0, 1, 3)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((1, 0, 1)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((1, 0, 3)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((2, 0, 1)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((2, 0, 3)) {
-            *val = 1.0;
-        }
-
-        if let Some(val) = image_data.get_mut((0, 2, 2)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((0, 2, 3)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((1, 2, 2)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((1, 2, 3)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((2, 1, 2)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((2, 1, 3)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((2, 2, 2)) {
-            *val = 1.0;
-        }
-        if let Some(val) = image_data.get_mut((2, 2, 3)) {
-            *val = 1.0;
+        // Red at 2 pixels, green at 3 and blue at 4, all opaque
+        let pixels = [
+            ((0, 0), 0),
+            ((1, 1), 0),
+            ((0, 1), 1),
+            ((1, 0), 1),
+            ((2, 0), 1),
+            ((0, 2), 2),
+            ((1, 2), 2),
+            ((2, 1), 2),
+            ((2, 2), 2),
+        ];
+        for ((row, col), channel) in pixels {
+            for c in [channel, 3] {
+                if let Some(val) = image_data.get_mut((row, col, c)) {
+                    *val = 1.0;
+                }
+            }
         }
 
         let processor = ImageProcessor::from_raw_image(&image_data);
@@ -98,7 +62,7 @@ mod tests {
         let expected_counts = [4, 3, 2];
 
         for (i, &expected_count) in expected_counts.iter().enumerate() {
-            let expected_ratio = expected_count as f64 / 9.0;
+            let expected_ratio = usize_to_f64(expected_count) / 9.0;
             let actual_ratio = ratios.get(i).copied().unwrap_or(0.0);
 
             assert!(
@@ -106,15 +70,17 @@ mod tests {
                 "Ratio {i} is incorrect. Expected {expected_ratio} (={expected_count}/9), got {actual_ratio}. This suggests denominator is wrong."
             );
 
-            let wrong_ratio = expected_count as f64 / 10.0;
+            let wrong_ratio = usize_to_f64(expected_count) / 10.0;
             assert!(
                 (actual_ratio - wrong_ratio).abs() > 0.01,
                 "Ratio {i} seems to use wrong denominator (total+1)"
             );
         }
 
-        let reconstructed_counts: Vec<usize> =
-            ratios.iter().map(|&r| (r * 9.0).round() as usize).collect();
+        let reconstructed_counts: Vec<usize> = ratios
+            .iter()
+            .map(|&r| f64_to_usize_saturating((r * 9.0).round()))
+            .collect();
 
         assert_eq!(
             reconstructed_counts, expected_counts,

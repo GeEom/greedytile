@@ -1,6 +1,7 @@
 //! Frame capture and GIF generation for algorithm visualization
 
 use crate::io::error::{AlgorithmError, Result};
+use crate::math::convert::usize_to_u32;
 use image::{Frame, Rgba, RgbaImage};
 
 /// Represents a single tile placement event
@@ -16,10 +17,7 @@ pub struct TilePlacement {
     pub iteration: usize,
 }
 
-/// Captures tile placements for visualization
-///
-/// Records placement events during algorithm execution to enable
-/// post-processing visualization of the generation process
+/// Placements and removals in the order they happened, for replay as a GIF
 pub struct VisualizationCapture {
     pub(crate) placements: Vec<TilePlacement>,
     initial_dims: (usize, usize),
@@ -29,6 +27,7 @@ pub struct VisualizationCapture {
 
 impl VisualizationCapture {
     /// The average of all tile colors is used as the empty color
+    #[must_use]
     pub fn new(
         initial_rows: usize,
         initial_cols: usize,
@@ -50,12 +49,13 @@ impl VisualizationCapture {
                 a_sum += u32::from(color[3]);
             }
 
-            let count = color_mapping.len() as u32;
+            // Each mean of u8 channels fits in a u8
+            let count = usize_to_u32(color_mapping.len());
             [
-                (r_sum / count) as u8,
-                (g_sum / count) as u8,
-                (b_sum / count) as u8,
-                (a_sum / count) as u8,
+                u8::try_from(r_sum / count).unwrap_or(u8::MAX),
+                u8::try_from(g_sum / count).unwrap_or(u8::MAX),
+                u8::try_from(b_sum / count).unwrap_or(u8::MAX),
+                u8::try_from(a_sum / count).unwrap_or(u8::MAX),
             ]
         };
 
@@ -88,22 +88,14 @@ impl VisualizationCapture {
     }
 
     /// Returns all recorded placement events
+    #[must_use]
     pub fn get_placements(&self) -> &[TilePlacement] {
         &self.placements
     }
 
-    /// Export the captured frames as a GIF with automatic frame skipping
-    ///
-    /// Automatically skips frames if the requested frame rate exceeds viewer capabilities.
-    /// For example, if `GIF_FRAME_DELAY_MS` is 5ms (200 FPS) but viewers only support 20ms (50 FPS),
-    /// this will keep every 4th frame to maintain the apparent animation speed.
-    ///
+    /// Write the replay as a GIF, dropping frames when the delay is under what viewers show
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - No tile placements were captured
-    /// - File system operations fail
-    /// - GIF encoding fails
+    /// Fails when nothing was captured or the file cannot be written.
     pub fn export_gif(&self, output_path: &str, frame_delay_ms: u32) -> Result<()> {
         use crate::io::configuration::VIEWER_MIN_FRAME_DELAY_MS;
 
@@ -173,8 +165,8 @@ impl VisualizationCapture {
             max_col = max_col.max(placement.col);
         }
 
-        let rows = (max_row - min_row + 1) as usize;
-        let cols = (max_col - min_col + 1) as usize;
+        let rows = usize::try_from(max_row - min_row + 1).unwrap_or(0);
+        let cols = usize::try_from(max_col - min_col + 1).unwrap_or(0);
 
         (min_row, min_col, rows, cols)
     }
@@ -197,8 +189,8 @@ impl VisualizationCapture {
         let mut frame_count = 0;
 
         for placement in &self.placements {
-            let grid_row = (placement.row - min_row) as usize;
-            let grid_col = (placement.col - min_col) as usize;
+            let grid_row = usize::try_from(placement.row - min_row).unwrap_or(usize::MAX);
+            let grid_col = usize::try_from(placement.col - min_col).unwrap_or(usize::MAX);
 
             if grid_row < rows && grid_col < cols {
                 if let Some(row) = grid.get_mut(grid_row)
@@ -242,7 +234,7 @@ impl VisualizationCapture {
         cols: usize,
         delay_ms: u32,
     ) -> Result<Frame> {
-        let mut img = RgbaImage::new(cols as u32, rows as u32);
+        let mut img = RgbaImage::new(usize_to_u32(cols), usize_to_u32(rows));
 
         for (row, row_data) in grid.iter().enumerate().take(rows) {
             for (col, &tile_ref) in row_data.iter().enumerate().take(cols) {
@@ -262,7 +254,7 @@ impl VisualizationCapture {
                     }
                 };
 
-                img.put_pixel(col as u32, row as u32, color);
+                img.put_pixel(usize_to_u32(col), usize_to_u32(row), color);
             }
         }
 
@@ -275,6 +267,7 @@ impl VisualizationCapture {
     }
 
     /// Returns the total number of placement events
+    #[must_use]
     pub const fn placement_count(&self) -> usize {
         self.placements.len()
     }

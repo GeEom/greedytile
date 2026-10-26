@@ -1,9 +1,11 @@
 //! Pattern statistics preprocessing using kernel density estimation and spatial analysis
 
 use crate::io::error::AlgorithmError;
+use crate::math::convert::{u64_to_f64, usize_to_f64};
 use crate::math::interpolation::Cubic;
 use crate::math::probability::erf;
 use ndarray::{Array2, Array4};
+use std::collections::BTreeMap;
 
 type TaperedInterpolationFn = Box<dyn Fn(f64) -> f64>;
 
@@ -42,6 +44,7 @@ pub struct SmoothKernelDistribution {
 
 impl SmoothKernelDistribution {
     /// Create a new kernel density estimator from weighted distance data
+    #[must_use]
     pub fn new(pair: (usize, usize), weighted_data: Vec<(f64, f64)>) -> Self {
         let (data_points, weights): (Vec<f64>, Vec<f64>) = weighted_data.into_iter().unzip();
 
@@ -54,6 +57,7 @@ impl SmoothKernelDistribution {
     }
 
     /// Calculate PDF at point x using reflection at x=0 boundary to handle edge effects
+    #[must_use]
     pub fn pdf(&self, x: f64) -> f64 {
         if x < 0.0 {
             return 0.0;
@@ -92,6 +96,7 @@ pub struct Processor {
 
 impl Processor {
     /// Create a new processor with source data and configuration parameters
+    #[must_use]
     pub const fn new(
         source_data: Array2<usize>,
         source_ratios: Vec<f64>,
@@ -107,11 +112,11 @@ impl Processor {
     }
 
     /// Extract all pairwise tile distances from the source pattern
+    #[must_use]
     pub fn calculate_integer_pair_distances(&self) -> Vec<IntegerPairDistances> {
         let (rows, cols) = self.source_data.dim();
 
-        let mut coordinates_by_value: std::collections::HashMap<usize, Vec<(usize, usize)>> =
-            std::collections::HashMap::new();
+        let mut coordinates_by_value: BTreeMap<usize, Vec<(usize, usize)>> = BTreeMap::new();
 
         for i in 0..rows {
             for j in 0..cols {
@@ -120,8 +125,7 @@ impl Processor {
             }
         }
 
-        let mut distance_groups: std::collections::HashMap<(usize, usize), Vec<u64>> =
-            std::collections::HashMap::new();
+        let mut distance_groups: BTreeMap<(usize, usize), Vec<u64>> = BTreeMap::new();
 
         for (&value1, coords1) in &coordinates_by_value {
             for (&value2, coords2) in &coordinates_by_value {
@@ -147,8 +151,7 @@ impl Processor {
         let mut result = Vec::new();
 
         for ((from_value, to_value), squared_distances) in distance_groups {
-            let mut squared_distance_counts: std::collections::HashMap<u64, usize> =
-                std::collections::HashMap::new();
+            let mut squared_distance_counts: BTreeMap<u64, usize> = BTreeMap::new();
 
             for squared_distance in squared_distances {
                 *squared_distance_counts.entry(squared_distance).or_insert(0) += 1;
@@ -158,7 +161,7 @@ impl Processor {
             let mut distance_frequencies: Vec<DistanceFrequency> = squared_distance_counts
                 .into_iter()
                 .map(|(squared_distance, frequency)| DistanceFrequency {
-                    distance: (squared_distance as f64).sqrt(),
+                    distance: u64_to_f64(squared_distance).sqrt(),
                     frequency,
                 })
                 .collect();
@@ -182,8 +185,8 @@ impl Processor {
     }
 
     /// Convert distance statistics into smooth kernel density distributions
+    #[must_use]
     pub fn create_smooth_kernel_distributions(
-        &self,
         pair_distances: &[IntegerPairDistances],
     ) -> Vec<SmoothKernelDistribution> {
         let mut distributions = Vec::new();
@@ -196,7 +199,7 @@ impl Processor {
             let weighted_data: Vec<(f64, f64)> = pair_data
                 .distances
                 .iter()
-                .map(|df| (df.distance, df.frequency as f64))
+                .map(|df| (df.distance, usize_to_f64(df.frequency)))
                 .collect();
 
             let dist = SmoothKernelDistribution::new(
@@ -210,23 +213,16 @@ impl Processor {
         distributions
     }
 
-    /// Create density interpolations from smooth kernel distributions
-    ///
-    /// Groups distributions by source value and creates interpolation functions
-    /// using log-ratio normalization to handle mixture distributions
-    ///
+    /// Fit, per source value, a spline of each pair's log density relative to their mixture
     /// # Errors
-    ///
-    /// Returns an error if cubic interpolation fails due to invalid data points
+    /// Fails when the sample points cannot be fitted.
     pub fn create_density_interpolations(
-        &self,
         distributions: &[SmoothKernelDistribution],
         exponential_sample_points: &[f64],
     ) -> Result<Vec<Vec<Cubic>>, AlgorithmError> {
-        let total_distributions = distributions.len() as f64;
+        let total_distributions = usize_to_f64(distributions.len());
 
-        let mut grouped: std::collections::HashMap<usize, Vec<&SmoothKernelDistribution>> =
-            std::collections::HashMap::new();
+        let mut grouped: BTreeMap<usize, Vec<&SmoothKernelDistribution>> = BTreeMap::new();
         for dist in distributions {
             grouped.entry(dist.pair.0).or_default().push(dist);
         }
@@ -248,9 +244,9 @@ impl Processor {
                     let pdf_single = dist.pdf(x);
 
                     let pdf_mixture: f64 =
-                        group.iter().map(|d| d.pdf(x)).sum::<f64>() / group.len() as f64;
+                        group.iter().map(|d| d.pdf(x)).sum::<f64>() / usize_to_f64(group.len());
 
-                    let n = group.len() as f64;
+                    let n = usize_to_f64(group.len());
                     let ratio = if pdf_mixture > 0.0 && pdf_single > 0.0 {
                         (pdf_single * n / pdf_mixture).ln() - total_distributions.ln()
                     } else {
@@ -275,15 +271,12 @@ impl Processor {
         Ok(all_interpolations)
     }
 
-    /// Apply locality tapering to density interpolations
-    ///
-    /// Transitions from source statistics to uniform distribution beyond
-    /// the pattern influence distance using error function-based tapering
+    /// Blend each fit into the plain source ratio by the pattern influence distance
     fn apply_locality_tapering(
         &self,
         density_interpolations: &[Vec<Cubic>],
     ) -> Vec<Vec<TaperedInterpolationFn>> {
-        let pattern_influence_distance = self.pattern_influence_distance as f64;
+        let pattern_influence_distance = usize_to_f64(self.pattern_influence_distance);
         let log_ratios: Vec<f64> = self.source_ratios.iter().map(|r| r.ln()).collect();
 
         let mut tapered_interpolations: Vec<Vec<TaperedInterpolationFn>> = Vec::new();
@@ -323,10 +316,7 @@ impl Processor {
         0.5 - erf_val / (2.0 * erf_max)
     }
 
-    /// Convert tapered interpolations into 4D probability influence matrices
-    ///
-    /// Each matrix element [from][to][di][dj] represents the influence
-    /// of a 'from' tile on placing a 'to' tile at relative position (di, dj)
+    /// Element [from][to][di][dj] is how a `from` tile changes the odds of `to` at (di, dj)
     fn compute_probability_influence_matrices(
         &self,
         tapered_interpolations: &[Vec<TaperedInterpolationFn>],
@@ -358,7 +348,7 @@ impl Processor {
                         &format!("matrix index {j} too large for i32"),
                     )
                 })? - radius;
-                let dist = ((di * di + dj * dj) as f64).sqrt();
+                let dist = f64::from(di * di + dj * dj).sqrt();
                 if let Some(dist_val) = distance_matrix.get_mut([i, j]) {
                     *dist_val = 1.0 / dist.max(1.0);
                 }
@@ -390,7 +380,7 @@ impl Processor {
                             )
                         })? - radius)
                             .abs();
-                        let dist = ((di * di + dj * dj) as f64).sqrt();
+                        let dist = f64::from(di * di + dj * dj).sqrt();
 
                         let interp_val = interpolation(dist);
                         let dist_val = distance_matrix.get([i, j]).copied().unwrap_or(1.0);
@@ -407,22 +397,17 @@ impl Processor {
         Ok(probability_influence_matrices)
     }
 
-    /// Preprocess source pattern into probability influence matrices
-    ///
-    /// This is the main entry point that orchestrates the full statistical
-    /// analysis pipeline from raw tile data to influence matrices
-    ///
+    /// Turn the source's pair distances into probability influence matrices
     /// # Errors
-    ///
-    /// Returns an error if density interpolation or matrix computation fails
+    /// Fails when a fit or the matrix computation fails.
     pub fn preprocess_pattern_statistics(
-        &mut self,
+        &self,
         exponential_sample_points: &[f64],
     ) -> crate::io::error::Result<Array4<f64>> {
         let pair_distances = self.calculate_integer_pair_distances();
-        let distributions = self.create_smooth_kernel_distributions(&pair_distances);
+        let distributions = Self::create_smooth_kernel_distributions(&pair_distances);
         let density_interpolations =
-            self.create_density_interpolations(&distributions, exponential_sample_points)?;
+            Self::create_density_interpolations(&distributions, exponential_sample_points)?;
         let tapered_interpolations = self.apply_locality_tapering(&density_interpolations);
         let probability_influence_matrices =
             self.compute_probability_influence_matrices(&tapered_interpolations)?;

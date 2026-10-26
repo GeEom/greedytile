@@ -1,8 +1,13 @@
 //! Image processing and pattern extraction from source images
 
+use crate::math::convert::{f64_to_u8_saturating, usize_to_f64};
 use ndarray::{Array2, Array3};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+
+/// An [`ImageProcessor`]'s parts: source grid, source ratios, cell type count,
+/// pattern influence distance, grid extension radius and colour mapping
+pub type ImageParts = (Array2<usize>, Vec<f64>, usize, usize, usize, Vec<[u8; 4]>);
 
 /// Converts images to integer-labeled grids and extracts pattern statistics
 pub struct ImageProcessor {
@@ -16,13 +21,8 @@ pub struct ImageProcessor {
 
 impl ImageProcessor {
     /// Load and process an image from a PNG file
-    ///
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The file at the given path cannot be opened or read
-    /// - The file is not a valid image format
-    /// - The image cannot be converted to RGBA format
+    /// Fails when the file cannot be read or decoded.
     pub fn from_png_file<P: AsRef<Path>>(path: P) -> crate::io::error::Result<Self> {
         let path_buf = path.as_ref().to_path_buf();
         let img =
@@ -50,8 +50,9 @@ impl ImageProcessor {
     }
 
     /// Process a raw image array into integer labels
+    #[must_use]
     pub fn from_raw_image(image_data: &Array3<f64>) -> Self {
-        let mut color_set = std::collections::HashSet::new();
+        let mut color_set = BTreeSet::new();
         let (height, width, _) = image_data.dim();
 
         for i in 0..height {
@@ -66,11 +67,10 @@ impl ImageProcessor {
             }
         }
 
-        // Deterministic color ordering ensures reproducible tile assignments
-        let mut unique_colors_bytes: Vec<[u8; 4]> = color_set.into_iter().collect();
-        unique_colors_bytes.sort_unstable();
+        // Sorted color order makes tile assignments reproducible
+        let unique_colors_bytes: Vec<[u8; 4]> = color_set.into_iter().collect();
 
-        let mut color_mapping = HashMap::new();
+        let mut color_mapping = BTreeMap::new();
         unique_colors_bytes
             .iter()
             .enumerate()
@@ -108,7 +108,7 @@ impl ImageProcessor {
         let total: usize = counts.iter().sum();
         let source_ratios: Vec<f64> = counts
             .iter()
-            .map(|&c| (c as f64) / (total as f64))
+            .map(|&c| usize_to_f64(c) / usize_to_f64(total))
             .collect();
 
         let unique_cell_count = source_ratios.len();
@@ -125,53 +125,52 @@ impl ImageProcessor {
         }
     }
 
-    /// Load and process an image from a PNG file path
-    ///
+    /// Same as [`Self::from_png_file`]
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The file at the given path cannot be opened or read
-    /// - The file is not a valid image format
-    /// - The image cannot be converted to RGBA format
+    /// Fails when the file cannot be read or decoded.
     pub fn from_png_path<P: AsRef<Path>>(path: P) -> crate::io::error::Result<Self> {
         Self::from_png_file(path)
     }
 
     /// Get the source pattern data grid
+    #[must_use]
     pub const fn source_data(&self) -> &Array2<usize> {
         &self.source_data
     }
 
     /// Get the frequency ratios for each tile type
+    #[must_use]
     pub fn source_ratios(&self) -> &[f64] {
         &self.source_ratios
     }
 
     /// Get the number of unique tile types
+    #[must_use]
     pub const fn unique_cell_count(&self) -> usize {
         self.unique_cell_count
     }
 
-    /// Returns the pattern influence distance (min dimension / 2)
-    ///
-    /// Used to determine how far pattern influences extend in the generated output
+    /// How far a placed tile's influence reaches: half the smaller dimension
+    #[must_use]
     pub const fn pattern_influence_distance(&self) -> usize {
         self.pattern_influence_distance
     }
 
     /// Returns the grid extension radius for dynamic grid growth
+    #[must_use]
     pub const fn grid_extension_radius(&self) -> usize {
         self.grid_extension_radius
     }
 
-    /// Returns RGBA values for each tile type (indexed by `tile_value` - 1)
-    /// Get the RGBA color mapping for tile visualization
+    /// RGBA colour of each cell type, at index `tile_value` - 1
+    #[must_use]
     pub fn color_mapping(&self) -> &[[u8; 4]] {
         &self.color_mapping
     }
 
     /// Consume the processor and return all its components
-    pub fn into_parts(self) -> (Array2<usize>, Vec<f64>, usize, usize, usize, Vec<[u8; 4]>) {
+    #[must_use]
+    pub fn into_parts(self) -> ImageParts {
         (
             self.source_data,
             self.source_ratios,
@@ -185,9 +184,9 @@ impl ImageProcessor {
 
 fn color_to_bytes(color: &[f64; 4]) -> [u8; 4] {
     [
-        (color[0] * 255.0) as u8,
-        (color[1] * 255.0) as u8,
-        (color[2] * 255.0) as u8,
-        (color[3] * 255.0) as u8,
+        f64_to_u8_saturating(color[0] * 255.0),
+        f64_to_u8_saturating(color[1] * 255.0),
+        f64_to_u8_saturating(color[2] * 255.0),
+        f64_to_u8_saturating(color[3] * 255.0),
     ]
 }

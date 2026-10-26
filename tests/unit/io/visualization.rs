@@ -82,7 +82,7 @@ mod tests {
     // Tests removal recording
     // Verified by recording removals with Some instead of None
     #[test]
-    fn test_record_removal() {
+    fn test_record_removal() -> crate::TestResult {
         let color_mapping = vec![[255, 0, 0, 255], [0, 255, 0, 255]];
         let mut viz = VisualizationCapture::new(10, 10, color_mapping, 100);
 
@@ -95,15 +95,31 @@ mod tests {
         assert_eq!(viz.placement_count(), 5);
 
         let placements = viz.get_placements();
-        assert_eq!(placements.first().unwrap().tile_ref, Some(2));
-        assert_eq!(placements.get(1).unwrap().tile_ref, Some(3));
-        assert_eq!(placements.get(2).unwrap().tile_ref, None);
-        assert_eq!(placements.get(3).unwrap().tile_ref, Some(2));
-        assert_eq!(placements.get(4).unwrap().tile_ref, None);
+        assert_eq!(
+            placements.first().ok_or("placement not recorded")?.tile_ref,
+            Some(2)
+        );
+        assert_eq!(
+            placements.get(1).ok_or("placement not recorded")?.tile_ref,
+            Some(3)
+        );
+        assert_eq!(
+            placements.get(2).ok_or("placement not recorded")?.tile_ref,
+            None
+        );
+        assert_eq!(
+            placements.get(3).ok_or("placement not recorded")?.tile_ref,
+            Some(2)
+        );
+        assert_eq!(
+            placements.get(4).ok_or("placement not recorded")?.tile_ref,
+            None
+        );
 
-        let removal = placements.get(2).unwrap();
+        let removal = placements.get(2).ok_or("placement not recorded")?;
         assert_eq!(removal.row, 5);
         assert_eq!(removal.col, 5);
         assert_eq!(removal.iteration, 3);
+        Ok(())
     }
 }

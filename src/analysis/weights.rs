@@ -1,5 +1,6 @@
 use crate::{
     algorithm::propagation::StepData,
+    math::convert::usize_to_i32,
     math::probability::binomial_normal_approximate_cdf,
     spatial::{GridState, grid::BoundingBox},
 };
@@ -10,19 +11,16 @@ use std::collections::BinaryHeap;
 /// Result of position weight calculation containing adjacency and combined weights
 pub struct WeightCalculationResult {
     /// Adjacency scores for each position
-    pub adjacency_matrix: Array2<f64>,
+    pub adjacency: Array2<f64>,
     /// Combined weight matrix incorporating all factors
-    pub weight_matrix: Array2<f64>,
+    pub weights: Array2<f64>,
     /// Validity matrix indicating which positions can be selected
-    pub validity_matrix: Array2<bool>,
+    pub validity: Array2<bool>,
 }
 
-/// Calculate position selection weights using adjacency, entropy, and density bias
-///
-/// Combines multiple factors to prioritize positions that:
-/// - Have high adjacency to already-placed tiles
-/// - Show low entropy (more constrained)
-/// - Help maintain source distribution ratios
+/// Weight each cell up for neighbouring placed tiles and for helping the colour
+/// ratios, and down for entropy and feasibility
+#[must_use]
 pub fn calculate_position_selection(
     grid_state: &GridState,
     selection_tally: &[usize],
@@ -74,7 +72,8 @@ pub fn calculate_position_selection(
                     .and_then(|probs| probs.get([i, j]))
                     .copied()
                     .unwrap_or(0.0);
-                dot_product += sign_dev * exp_abs_dev * matrix_val;
+                let term = sign_dev * exp_abs_dev * matrix_val;
+                dot_product += term;
             }
             if let Some(bias) = density_bias.get_mut([i, j]) {
                 *bias = density_bias_strength.mul_add(dot_product.exp(), 1.0);
@@ -88,15 +87,16 @@ pub fn calculate_position_selection(
 
     for i in 0..grid_state.rows() {
         for j in 0..grid_state.cols() {
-            let adj_val = grid_state
-                .adjacency_weights
-                .get([i, j])
-                .copied()
-                .unwrap_or(0)
-                .saturating_sub(1) as f64;
+            let adj_val = f64::from(
+                grid_state
+                    .adjacency_weights
+                    .get([i, j])
+                    .copied()
+                    .unwrap_or(0)
+                    .saturating_sub(1),
+            );
             let locked_val = grid_state.locked_tiles.get([i, j]).copied().unwrap_or(0);
 
-            // Set validity to false for locked positions
             if locked_val > 1
                 && let Some(valid) = validity_matrix.get_mut([i, j])
             {
@@ -128,35 +128,29 @@ pub fn calculate_position_selection(
         }
     }
 
-    // Apply boundary constraints if specified
     if let Some(bounds) = &grid_state.generation_bounds {
-        apply_boundary_mask(
-            &mut weight_matrix,
-            &mut adjacency_weight_matrix,
-            &mut validity_matrix,
-            bounds,
-            system_offset,
-        );
+        apply_boundary_mask(&mut validity_matrix, bounds, system_offset);
     }
 
     WeightCalculationResult {
-        adjacency_matrix: adjacency_weight_matrix,
-        weight_matrix,
-        validity_matrix,
+        adjacency: adjacency_weight_matrix,
+        weights: weight_matrix,
+        validity: validity_matrix,
     }
 }
 
 /// Apply boundary mask to mark positions outside bounds as invalid
 fn apply_boundary_mask(
-    _weight_matrix: &mut Array2<f64>,
-    _adjacency_matrix: &mut Array2<f64>,
     validity_matrix: &mut Array2<bool>,
     bounds: &BoundingBox,
     system_offset: [i32; 2],
 ) {
     for i in 0..validity_matrix.nrows() {
         for j in 0..validity_matrix.ncols() {
-            let world_pos = [i as i32 - system_offset[0], j as i32 - system_offset[1]];
+            let world_pos = [
+                usize_to_i32(i) - system_offset[0],
+                usize_to_i32(j) - system_offset[1],
+            ];
 
             if !bounds.contains(world_pos) {
                 validity_matrix[[i, j]] = false;
@@ -194,6 +188,7 @@ impl PartialOrd for IndexValue {
 }
 
 /// Returns top K 2D indices with highest values, filtered by validity matrix
+#[must_use]
 pub fn top_k_valid_indices(
     matrix: &Array2<f64>,
     validity: &Array2<bool>,
@@ -234,6 +229,7 @@ pub fn top_k_valid_indices(
 }
 
 /// Returns top K indices from a given set of indices based on their matrix values
+#[must_use]
 pub fn top_k_from_indices(
     matrix: &Array2<f64>,
     indices: &[[usize; 2]],

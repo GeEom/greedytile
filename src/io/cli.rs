@@ -10,7 +10,8 @@ use crate::io::error::Result;
 use crate::io::image::export_grid_as_png;
 use crate::io::prefill::PrefillData;
 use crate::io::progress::ProgressManager;
-use clap::Parser;
+use clap::{Args, Parser};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -22,8 +23,6 @@ use std::time::Instant;
     about = "Generate tile patterns using random greedy algorithm"
 )]
 /// Command-line arguments for the pattern generation tool
-// CLI tools commonly need multiple boolean flags for various features and user preferences
-#[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     /// Input PNG file or directory to process
     #[arg(value_name = "TARGET")]
@@ -37,10 +36,6 @@ pub struct Cli {
     #[arg(short, long, default_value_t = DEFAULT_MAX_ITERATIONS)]
     pub iterations: usize,
 
-    /// Enable visualization output as animated GIF
-    #[arg(short, long)]
-    pub visualize: bool,
-
     /// Suppress progress output
     #[arg(short, long)]
     pub quiet: bool,
@@ -48,10 +43,6 @@ pub struct Cli {
     /// Process files even if output exists
     #[arg(short, long)]
     pub no_skip: bool,
-
-    /// Enable analysis capture and export
-    #[arg(short, long)]
-    pub analysis: bool,
 
     /// Maximum width in pixels (implies square if height not specified)
     #[arg(short = 'w', long)]
@@ -61,6 +52,18 @@ pub struct Cli {
     #[arg(short = 'H', long)]
     pub height: Option<usize>,
 
+    /// Tile set and prefill flags
+    #[command(flatten)]
+    pub tiles: TileOptions,
+
+    /// Extra output flags
+    #[command(flatten)]
+    pub outputs: OutputOptions,
+}
+
+/// Flags that shape the tile set and the starting grid
+#[derive(Args, Clone, Copy, Debug, Default)]
+pub struct TileOptions {
     /// Use prefill image if available (looks for <input>_pre.png)
     #[arg(short, long)]
     pub prefill: bool,
@@ -74,13 +77,27 @@ pub struct Cli {
     pub mirror: bool,
 }
 
+/// Flags that add files beside the generated image
+#[derive(Args, Clone, Copy, Debug, Default)]
+pub struct OutputOptions {
+    /// Enable visualization output as animated GIF
+    #[arg(short, long)]
+    pub visualize: bool,
+
+    /// Enable analysis capture and export
+    #[arg(short, long)]
+    pub analysis: bool,
+}
+
 impl Cli {
     /// Check if existing output files should be skipped
+    #[must_use]
     pub const fn skip_existing(&self) -> bool {
         !self.no_skip
     }
 
     /// Check if progress should be displayed
+    #[must_use]
     pub const fn should_show_progress(&self) -> bool {
         !self.quiet
     }
@@ -104,10 +121,8 @@ impl FileProcessor {
     }
 
     /// Process files according to CLI arguments
-    ///
     /// # Errors
-    ///
-    /// Returns an error if target validation or file processing fails
+    /// Fails when the target is not a PNG or directory, or a file fails to process.
     pub fn process(&mut self) -> Result<()> {
         let files = self.collect_files()?;
 
@@ -124,7 +139,7 @@ impl FileProcessor {
         }
 
         if let Some(ref mut pm) = self.progress_manager {
-            pm.finish();
+            pm.finish()?;
         }
 
         Ok(())
@@ -133,7 +148,7 @@ impl FileProcessor {
     fn collect_files(&self) -> Result<Vec<PathBuf>> {
         if self.cli.target.is_file() {
             if self.cli.target.extension().and_then(|s| s.to_str()) == Some("png") {
-                if self.should_process_file(&self.cli.target) {
+                if self.should_process_file(&self.cli.target)? {
                     Ok(vec![self.cli.target.clone()])
                 } else {
                     Ok(vec![])
@@ -148,7 +163,7 @@ impl FileProcessor {
             for entry in std::fs::read_dir(&self.cli.target)? {
                 let path = entry?.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("png")
-                    && self.should_process_file(&path)
+                    && self.should_process_file(&path)?
                 {
                     files.push(path);
                 }
@@ -162,26 +177,26 @@ impl FileProcessor {
         }
     }
 
-    fn should_process_file(&self, input_path: &Path) -> bool {
+    fn should_process_file(&self, input_path: &Path) -> Result<bool> {
         if !self.cli.skip_existing() {
-            return true;
+            return Ok(true);
         }
 
         let output_path = Self::get_output_path(input_path);
         if output_path.exists() {
-            // Allow print for user feedback for progress messages
-            #[allow(clippy::print_stderr)]
             if !self.cli.quiet {
-                eprintln!("Skipping: {} (output exists)", input_path.display());
+                writeln!(
+                    std::io::stderr().lock(),
+                    "Skipping: {} (output exists)",
+                    input_path.display()
+                )?;
             }
-            false
+            Ok(false)
         } else {
-            true
+            Ok(true)
         }
     }
 
-    // Allow print for user feedback for missing prefill file
-    #[allow(clippy::print_stderr)]
     fn process_file(&mut self, input_path: &Path, index: usize) -> Result<()> {
         let start_time = Instant::now();
         let output_path = Self::get_output_path(input_path);
@@ -205,34 +220,34 @@ impl FileProcessor {
             pattern_influence_distance: PATTERN_INFLUENCE_DISTANCE,
             grid_extension_radius: GRID_EXTENSION_RADIUS,
             tile_size: TILE_SIZE,
-            include_rotations: self.cli.rotate,
-            include_reflections: self.cli.mirror,
+            include_rotations: self.cli.tiles.rotate,
+            include_reflections: self.cli.tiles.mirror,
             bounds,
         };
 
         let mut executor =
             GreedyStochastic::from_image_processor(image_processor, config, self.cli.seed)?;
 
-        // Apply prefill if requested
-        if self.cli.prefill {
+        if self.cli.tiles.prefill {
             let prefill_path = Self::get_prefill_path(input_path);
             if prefill_path.exists() {
                 let prefill_data = PrefillData::from_png(&prefill_path, executor.color_mapping())?;
                 executor.apply_prefill(prefill_data)?;
             } else if !self.cli.quiet {
-                eprintln!(
+                writeln!(
+                    std::io::stderr().lock(),
                     "No prefill found at: {} (continuing without prefill)",
                     prefill_path.display()
-                );
+                )?;
             }
         }
 
         // Enable visualization if requested or if analysis is requested
-        if self.cli.visualize || self.cli.analysis {
+        if self.cli.outputs.visualize || self.cli.outputs.analysis {
             executor.enable_visualization(self.cli.iterations);
         }
 
-        if self.cli.analysis {
+        if self.cli.outputs.analysis {
             executor.enable_analysis();
         }
 
@@ -255,7 +270,7 @@ impl FileProcessor {
                 .ok_or_else(|| crate::io::error::io_error("Invalid output path"))?,
         )?;
 
-        if self.cli.visualize {
+        if self.cli.outputs.visualize {
             let viz_path = Self::get_visualization_path(input_path);
             executor.export_visualization(
                 viz_path
@@ -264,7 +279,7 @@ impl FileProcessor {
             )?;
         }
 
-        if self.cli.analysis {
+        if self.cli.outputs.analysis {
             let analysis_path = Self::get_analysis_path(input_path);
             if let (Some(viz), Some(analysis)) = (&executor.visualization, &executor.analysis) {
                 analysis.export_analysis(

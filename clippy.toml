@@ -1,0 +1,18 @@
+# Rendered for check.sh, which fails unless this file reads exactly so, and
+# which bans every other clippy config in the repo.
+# Banned calls stay banned in test code. Tests may print, as the harness
+# captures what they print.
+allow-unwrap-in-tests = false
+allow-expect-in-tests = false
+allow-panic-in-tests = false
+allow-indexing-slicing-in-tests = false
+allow-print-in-tests = true
+# Lint public items too, even where the fix changes their API.
+avoid-breaking-exported-api = false
+# Hash collections iterate in an order that changes from run to run, which
+# leaks into output, artifacts and tests. Use BTreeMap and BTreeSet, or an
+# insertion-ordered map where keys have no order.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order varies between runs; use BTreeMap" },
+    { path = "std::collections::HashSet", reason = "iteration order varies between runs; use BTreeSet" },
+]

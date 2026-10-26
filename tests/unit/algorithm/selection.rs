@@ -10,7 +10,7 @@ mod tests {
     };
     use greedytile::spatial::GridState;
     use greedytile::spatial::tiles::Tile;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     // Tests viable tile computation with constraints
     // Verified by testing wildcard values (-1) in patterns match any tile value
@@ -30,7 +30,7 @@ mod tests {
             *val = 2;
         }
 
-        let mut dispatch_rules = HashMap::new();
+        let mut dispatch_rules = BTreeMap::new();
         dispatch_rules.insert(vec![1, 0], vec![1]);
         dispatch_rules.insert(vec![0, 1], vec![2]);
         dispatch_rules.insert(vec![1, 1], vec![1, 2]);
@@ -75,7 +75,7 @@ mod tests {
             [[2, 2, 2], [2, 2, 2], [2, 2, 2]],
         ];
 
-        let mut dispatch_rules = HashMap::new();
+        let mut dispatch_rules = BTreeMap::new();
         dispatch_rules.insert(vec![0, 0], vec![1, 2]);
 
         let step_data = StepData {
@@ -132,7 +132,7 @@ mod tests {
             *val = 1;
         }
 
-        let mut dispatch_rules = HashMap::new();
+        let mut dispatch_rules = BTreeMap::new();
         dispatch_rules.insert(vec![1, 1], vec![1, 2]);
         dispatch_rules.insert(vec![0, 0], vec![1, 2]);
         dispatch_rules.insert(vec![1, 0], vec![1, 2]);

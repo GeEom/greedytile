@@ -133,20 +133,22 @@ mod tests {
     // Tests that negative values return exactly 0.0 using strict equality checks and comprehensive boundary testing
     // Verified by using strict equality to verify negative values must return exactly 0.0
     #[test]
-    #[allow(clippy::float_cmp)]
     fn test_pdf_without_negative_check_would_fail() {
         let weighted_data = vec![(0.1, 1.0)];
         let dist = SmoothKernelDistribution::new((0, 1), weighted_data);
 
         let pdf_at_negative = dist.pdf(-0.05);
+        // Comparing bits demands exactly +0.0
         assert_eq!(
-            pdf_at_negative, 0.0,
+            pdf_at_negative.to_bits(),
+            0.0_f64.to_bits(),
             "PDF at x=-0.05 must be exactly 0.0, not {pdf_at_negative} (would be non-zero without boundary check)"
         );
 
         let pdf_at_tiny_negative = dist.pdf(-1e-100);
         assert_eq!(
-            pdf_at_tiny_negative, 0.0,
+            pdf_at_tiny_negative.to_bits(),
+            0.0_f64.to_bits(),
             "PDF at x=-1e-100 must be exactly 0.0"
         );
 
@@ -154,7 +156,8 @@ mod tests {
         for &neg_x in &test_negative_values {
             let pdf_val = dist.pdf(neg_x);
             assert_eq!(
-                pdf_val, 0.0,
+                pdf_val.to_bits(),
+                0.0_f64.to_bits(),
                 "PDF at x={neg_x} must be exactly 0.0, got {pdf_val}"
             );
         }

@@ -1,30 +1,23 @@
-//! Tile extraction and pattern matching utilities
-//!
-//! Extracts overlapping tiles from source images and builds boolean reference
-//! rules for constraint-based pattern matching. Supports transformations
-//! (rotation, reflection) to increase pattern variety from limited source data.
+//! Takes every 3x3 tile from a source, optionally rotated and mirrored, and
+//! indexes them by the cell types they contain
 
+use crate::math::convert::{f64_to_usize_saturating, usize_to_f64};
 use ndarray::Array2;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A 3x3 tile with cell values representing color/type indices
 pub type Tile = [[usize; 3]; 3];
 
-/// Tile extractor managing source patterns and constraint rules
-///
-/// Maintains deduplicated tiles and boolean membership rules for efficient
-/// pattern matching during wave function collapse.
+/// The distinct source tiles, and which of them hold each set of cell types
 pub struct TileExtractor {
     source_tiles: Vec<Tile>,
-    source_tile_boolean_reference_rules: HashMap<Vec<u8>, Vec<usize>>,
+    source_tile_boolean_reference_rules: BTreeMap<Vec<u8>, Vec<usize>>,
 }
 
 impl TileExtractor {
-    /// Extract tiles from source data with optional transformations
-    ///
-    /// Slides a window across the source to extract all overlapping tiles.
-    /// Optionally generates rotations (90°, 180°, 270°) and reflections
-    /// to increase pattern variety. All tiles are deduplicated.
+    /// Every overlapping tile in `source_data`, with rotations and reflections if asked,
+    /// each kept once
+    #[must_use]
     pub fn extract_tiles(
         source_data: &Array2<usize>,
         tile_size: usize,
@@ -83,7 +76,7 @@ impl TileExtractor {
 
         Self {
             source_tiles: all_tiles,
-            source_tile_boolean_reference_rules: HashMap::new(),
+            source_tile_boolean_reference_rules: BTreeMap::new(),
         }
     }
 
@@ -119,13 +112,11 @@ impl TileExtractor {
     }
 
     fn deduplicate_tiles(tiles: Vec<Tile>) -> Vec<Tile> {
-        let mut seen = HashSet::new();
+        let mut seen = BTreeSet::new();
         let mut unique_tiles = Vec::new();
 
         for tile in tiles {
-            let key: Vec<usize> = tile.iter().flat_map(|row| row.iter().copied()).collect();
-
-            if seen.insert(key) {
+            if seen.insert(tile) {
                 unique_tiles.push(tile);
             }
         }
@@ -133,14 +124,10 @@ impl TileExtractor {
         unique_tiles
     }
 
-    /// Build boolean reference rules for constraint-based tile selection
-    ///
-    /// Creates a mapping from boolean constraint patterns to compatible tiles.
-    /// Each pattern is a bit vector where 1 means "must contain this cell type"
-    /// and 0 means "no constraint". This enables efficient filtering during
-    /// wave function collapse propagation.
+    /// Map each membership pattern to the tiles holding every type it flags;
+    /// a 1 means "must contain this cell type", a 0 places no constraint
     pub fn build_boolean_reference_rules(&mut self, unique_cell_count: usize) {
-        let mut pattern_to_indices: HashMap<Vec<u8>, Vec<usize>> = HashMap::new();
+        let mut pattern_to_indices: BTreeMap<Vec<u8>, Vec<usize>> = BTreeMap::new();
 
         // Generate all 2^n possible constraint patterns
         let total_patterns = 1 << unique_cell_count;
@@ -175,19 +162,16 @@ impl TileExtractor {
         self.source_tile_boolean_reference_rules = pattern_to_indices;
     }
 
-    /// Calculate exponential sample points for pattern influence decay
-    ///
-    /// Generates sample points along an exponential decay curve used for
-    /// spatial influence calculations. The decay rate is controlled by
-    /// the pattern influence distance parameter.
+    /// Distances at which to sample pattern influence, denser near zero
+    #[must_use]
     pub fn calculate_exponential_sample_points(pattern_influence_distance: f64) -> Vec<f64> {
         let k = pattern_influence_distance;
         let step_size = 5.0 * (2.0_f64.ln() / (4.0 * k)).tanh() / 3.0;
 
-        let num_steps = ((0.75 / step_size).ceil() as usize) + 1;
+        let num_steps = f64_to_usize_saturating((0.75 / step_size).ceil()) + 1;
         // Exponential decay formula: k * log(1 - 3x/4) / log(0.5)
         (0..num_steps)
-            .map(|i| (i as f64 * step_size).min(0.75))
+            .map(|i| (usize_to_f64(i) * step_size).min(0.75))
             .map(|x_val| {
                 if x_val == 0.0 {
                     0.0
@@ -200,36 +184,32 @@ impl TileExtractor {
     }
 
     /// Get all extracted source tiles
+    #[must_use]
     pub fn source_tiles(&self) -> &[Tile] {
         &self.source_tiles
     }
 
     /// Get the constraint pattern to compatible tiles mapping
-    pub const fn get_boolean_reference_rules(&self) -> &HashMap<Vec<u8>, Vec<usize>> {
+    #[must_use]
+    pub const fn get_boolean_reference_rules(&self) -> &BTreeMap<Vec<u8>, Vec<usize>> {
         &self.source_tile_boolean_reference_rules
     }
 }
 
-/// Convert a tile to membership booleans for constraint matching
-///
-/// Returns a boolean vector where position i is 1 if the tile contains
-/// cell type i+1. Used during wave function collapse to match tiles
-/// against constraint patterns.
+/// Flags at position i whether the tile holds cell type i + 1
+#[must_use]
 pub fn convert_tile_to_membership_booleans(
     tile: &[[i32; 3]; 3],
     unique_cell_count: usize,
 ) -> Vec<u8> {
-    let mut unique_values = HashSet::new();
-    for row in tile {
-        for &val in row {
-            if val > 0 {
-                unique_values.insert(val as usize);
-            }
+    // Values past the count have no slot
+    let mut membership = vec![0; unique_cell_count];
+    for &val in tile.iter().flatten() {
+        if let Some(cell_type) = usize::try_from(val).ok().filter(|&value| value > 0)
+            && let Some(flag) = membership.get_mut(cell_type - 1)
+        {
+            *flag = 1;
         }
     }
-
-    // Boolean vector indexed by cell type (1-based)
-    (1..=unique_cell_count)
-        .map(|i| u8::from(unique_values.contains(&i)))
-        .collect()
+    membership
 }

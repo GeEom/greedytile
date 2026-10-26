@@ -9,7 +9,7 @@ mod tests {
     // Tests grid expansion for out-of-bounds coordinates with content preservation
     // Verified by omitting data copy loop in extend_array_3d
     #[test]
-    fn test_extend_matrices_expands_grid_for_out_of_bounds_coordinates() {
+    fn test_extend_matrices_expands_grid_for_out_of_bounds_coordinates() -> crate::TestResult {
         let mut initial = Array3::<f64>::zeros((2, 3, 3));
         if let Some(val) = initial.get_mut([0, 1, 1]) {
             *val = 5.0;
@@ -23,7 +23,7 @@ mod tests {
         let coordinates = [5, 5];
         let radius = 2;
 
-        let (extended, new_offset) = extend_matrices(initial.clone(), offset, &coordinates, radius);
+        let (extended, new_offset) = extend_matrices(initial.clone(), offset, coordinates, radius);
 
         assert_ne!(
             extended.dim(),
@@ -34,8 +34,8 @@ mod tests {
         assert!(extended.dim().1 >= 9, "Grid height should be at least 9");
         assert!(extended.dim().2 >= 9, "Grid width should be at least 9");
 
-        let padding_left = (new_offset[0] - offset[0]) as usize;
-        let padding_top = (new_offset[1] - offset[1]) as usize;
+        let padding_left = usize::try_from(new_offset[0] - offset[0])?;
+        let padding_top = usize::try_from(new_offset[1] - offset[1])?;
 
         assert!(
             extended
@@ -60,6 +60,7 @@ mod tests {
                 .get([1, last_row, last_col])
                 .is_some_and(|&v| (v - 1.0).abs() < f64::EPSILON)
         );
+        Ok(())
     }
 
     // Tests GridState extension preserves all data (entropy, locked tiles, adjacency weights, probabilities, feasibility)
@@ -92,13 +93,8 @@ mod tests {
             *val = 0.9;
         }
 
-        let _original_dims = (grid.rows(), grid.cols());
-
-        let offset = [0, 0];
-        let coordinates = [5, 5];
-        let radius = 2;
-
-        let (new_offset, extended) = grid.extend_if_needed(offset, &coordinates, radius);
+        // Radius 2 around [5, 5] reaches row and column 7
+        let (new_offset, extended) = grid.extend_if_needed([0, 0], [5, 5], 2);
 
         assert!(extended, "Grid should have been extended");
         assert_eq!(

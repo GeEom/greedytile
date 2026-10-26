@@ -5,13 +5,12 @@ mod tests {
 
     use greedytile::io::image::export_grid_as_png;
     use greedytile::spatial::GridState;
-    use std::fs;
-    use std::path::Path;
+    use tempfile::TempDir;
 
     // Tests PNG file creation with alternating pattern
     // Verified by disabling file save operation
     #[test]
-    fn test_export_grid_as_png_creates_file() {
+    fn test_export_grid_as_png_creates_file() -> crate::TestResult {
         let mut grid_state = GridState::new(3, 3, 2);
 
         if let Some(val) = grid_state.locked_tiles.get_mut([0, 0]) {
@@ -29,21 +28,16 @@ mod tests {
 
         let color_mapping = vec![[255, 0, 0, 255], [0, 255, 0, 255]];
 
-        fs::create_dir_all("data/test").ok();
+        let dir = TempDir::new()?;
+        let output_path = dir.path().join("test_output.png");
+        let output = output_path.to_str().ok_or("path is not UTF-8")?;
 
-        let output_path = "data/test/test_output.png";
-
-        let result = export_grid_as_png(&grid_state, &color_mapping, output_path);
+        let result = export_grid_as_png(&grid_state, &color_mapping, output);
 
         assert!(result.is_ok(), "PNG export should succeed");
 
-        assert!(
-            Path::new(output_path).exists(),
-            "PNG file should be created"
-        );
-
-        fs::remove_file(output_path).ok();
-        fs::remove_dir("data/test").ok();
+        assert!(output_path.exists(), "PNG file should be created");
+        Ok(())
     }
 
     // Tests error when no tiles placed

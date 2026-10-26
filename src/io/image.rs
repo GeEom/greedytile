@@ -1,5 +1,6 @@
 //! PNG export with automatic cropping and transparency handling
 
+use crate::math::convert::usize_to_u32;
 use crate::spatial::GridState;
 use image::{ImageBuffer, Rgba};
 
@@ -45,15 +46,9 @@ fn calculate_bounding_box(grid_state: &GridState) -> Option<BoundingBox> {
     })
 }
 
-/// Export the grid state as a PNG image with transparent background
-///
+/// Save the placed tiles, cropped to their extent, as a PNG with empty cells transparent
 /// # Errors
-///
-/// Returns an error if:
-/// - No tiles have been placed in the grid (all tiles are empty)
-/// - A tile value is out of bounds for the color mapping
-/// - The parent directory cannot be created
-/// - The image cannot be saved to the specified path
+/// Fails when no tile is placed, a tile has no colour, or the file cannot be written.
 pub fn export_grid_as_png(
     grid_state: &GridState,
     color_mapping: &[[u8; 4]],
@@ -64,8 +59,8 @@ pub fn export_grid_as_png(
         reason: "No tiles have been placed in the grid".to_string(),
     })?;
 
-    let width = (bbox.max_col - bbox.min_col + 1) as u32;
-    let height = (bbox.max_row - bbox.min_row + 1) as u32;
+    let width = usize_to_u32(bbox.max_col - bbox.min_col + 1);
+    let height = usize_to_u32(bbox.max_row - bbox.min_row + 1);
 
     let mut img = ImageBuffer::new(width, height);
 
@@ -76,8 +71,8 @@ pub fn export_grid_as_png(
                 .get([row, col])
                 .copied()
                 .unwrap_or(0);
-            let pixel_x = (col - bbox.min_col) as u32;
-            let pixel_y = (row - bbox.min_row) as u32;
+            let pixel_x = usize_to_u32(col - bbox.min_col);
+            let pixel_y = usize_to_u32(row - bbox.min_row);
 
             let color = if tile_value > 1 {
                 // Tiles: 0=uninitialized, 1=empty, 2+=actual tile

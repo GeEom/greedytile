@@ -1,8 +1,7 @@
-/// Error function approximation using Abramowitz and Stegun method
-///
-/// Used for density correction in tile selection to maintain source distribution
-/// ratios. This approximation provides sufficient accuracy for probability
-/// calculations while avoiding expensive library dependencies.
+use crate::math::convert::usize_to_f64;
+
+/// The error function, by Abramowitz and Stegun's approximation 7.1.26
+#[must_use]
 pub fn erf(x: f64) -> f64 {
     let a1 = 0.254_829_592_f64;
     let a2 = -0.284_496_736_f64;
@@ -21,11 +20,9 @@ pub fn erf(x: f64) -> f64 {
     sign * y
 }
 
-/// Normal approximation to the cumulative distribution function for binomial distribution
-///
-/// Computes P(X ≤ k) for X ~ Binomial(n, p) using the normal approximation
+/// P(X ≤ k) for X ~ Binomial(n, p), by the normal approximation
+#[must_use]
 pub fn binomial_normal_approximate_cdf(n: usize, p: f64, k: usize) -> f64 {
-    // Handle edge cases
     if k >= n {
         return 1.0;
     }
@@ -36,9 +33,8 @@ pub fn binomial_normal_approximate_cdf(n: usize, p: f64, k: usize) -> f64 {
         return 0.0;
     }
 
-    // Calculate mean and standard deviation
-    let n_f64 = n as f64;
-    let k_f64 = k as f64;
+    let n_f64 = usize_to_f64(n);
+    let k_f64 = usize_to_f64(k);
     let mean = n_f64 * p;
     let variance = n_f64 * p * (1.0 - p);
     let std_dev = variance.sqrt();

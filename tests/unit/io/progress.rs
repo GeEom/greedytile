@@ -10,23 +10,24 @@ mod tests {
     // Tests ProgressManager construction
     // Verified by setting wrong initial state
     #[test]
-    fn test_progress_manager_new() {
+    fn test_progress_manager_new() -> crate::TestResult {
         let mut pm = ProgressManager::new();
 
         pm.initialize(0);
-        pm.finish();
+        pm.finish()?;
 
         pm.initialize(1);
         pm.start_file(0, Path::new("test.png"), 10);
         pm.update_iteration(0, 5, Duration::from_millis(50));
         pm.complete_file(0, Duration::from_millis(100));
-        pm.finish();
+        pm.finish()?;
+        Ok(())
     }
 
     // Tests default trait implementation
     // Verified by creating different initial states
     #[test]
-    fn test_progress_manager_default() {
+    fn test_progress_manager_default() -> crate::TestResult {
         let mut pm1 = ProgressManager::new();
         let mut pm2 = ProgressManager::default();
 
@@ -42,14 +43,15 @@ mod tests {
         pm1.complete_file(0, Duration::from_millis(200));
         pm2.complete_file(0, Duration::from_millis(200));
 
-        pm1.finish();
-        pm2.finish();
+        pm1.finish()?;
+        pm2.finish()?;
+        Ok(())
     }
 
     // Tests initialization with single file
     // Verified by skipping initialization for single files
     #[test]
-    fn test_initialize_single_file() {
+    fn test_initialize_single_file() -> crate::TestResult {
         let mut pm = ProgressManager::new();
         pm.initialize(1);
 
@@ -62,13 +64,14 @@ mod tests {
         pm.update_iteration(0, 100, Duration::from_millis(400));
 
         pm.complete_file(0, Duration::from_millis(400));
-        pm.finish();
+        pm.finish()?;
+        Ok(())
     }
 
     // Tests individual progress bars
     // Verified by creating one less progress bar
     #[test]
-    fn test_initialize_multiple_files_under_limit() {
+    fn test_initialize_multiple_files_under_limit() -> crate::TestResult {
         let mut pm = ProgressManager::new();
         let file_count = MAX_INDIVIDUAL_PROGRESS_BARS - 1;
         pm.initialize(file_count);
@@ -82,13 +85,14 @@ mod tests {
             pm.complete_file(i, Duration::from_millis(100));
         }
 
-        pm.finish();
+        pm.finish()?;
+        Ok(())
     }
 
     // Tests batch progress bar
     // Verified by changing batch mode threshold
     #[test]
-    fn test_initialize_multiple_files_over_limit() {
+    fn test_initialize_multiple_files_over_limit() -> crate::TestResult {
         let mut pm = ProgressManager::new();
         let large_file_count = MAX_INDIVIDUAL_PROGRESS_BARS + 5;
         pm.initialize(large_file_count);
@@ -99,13 +103,14 @@ mod tests {
             pm.complete_file(i, Duration::from_millis(100));
         }
 
-        pm.finish();
+        pm.finish()?;
+        Ok(())
     }
 
     // Tests full processing lifecycle
     // Verified by breaking iteration storage and resize logic
     #[test]
-    fn test_file_processing_lifecycle() {
+    fn test_file_processing_lifecycle() -> crate::TestResult {
         let mut pm = ProgressManager::new();
         pm.initialize(3);
 
@@ -144,16 +149,18 @@ mod tests {
 
         pm.update_iteration(10, 50, Duration::from_millis(100));
 
-        pm.finish();
+        pm.finish()?;
+        Ok(())
     }
 
     // Tests empty file list handling
     // Verified by adding panic for zero files
     #[test]
-    fn test_empty_file_list() {
+    fn test_empty_file_list() -> crate::TestResult {
         let mut pm = ProgressManager::new();
         pm.initialize(0);
-        pm.finish();
+        pm.finish()?;
+        Ok(())
     }
 
     // Tests out-of-bounds index handling

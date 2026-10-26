@@ -1,10 +1,9 @@
-use bitvec::prelude::*;
+use bitvec::bitvec;
+use bitvec::vec::BitVec;
+use std::collections::BTreeSet;
 use std::fmt;
 
-/// Fixed-size bitset for tracking tile membership in compatibility sets
-///
-/// Uses 1-based indexing to match tile references throughout the system.
-/// Provides O(1) membership testing and efficient set operations.
+/// A fixed-size set of tile references, which are 1-based like everywhere else
 #[derive(Clone, Debug)]
 pub struct TileBitset {
     bits: BitVec,
@@ -13,6 +12,7 @@ pub struct TileBitset {
 
 impl TileBitset {
     /// Create a bitset with no tiles present
+    #[must_use]
     pub fn new(max_tiles: usize) -> Self {
         Self {
             bits: bitvec![0; max_tiles],
@@ -21,6 +21,7 @@ impl TileBitset {
     }
 
     /// Create a bitset containing all possible tiles
+    #[must_use]
     pub fn all(max_tiles: usize) -> Self {
         Self {
             bits: bitvec![1; max_tiles],
@@ -28,9 +29,7 @@ impl TileBitset {
         }
     }
 
-    /// Insert a tile index
-    ///
-    /// Takes 1-based tile indices, storing at index-1 internally
+    /// Insert a tile reference; 0 and those past the size are ignored
     pub fn insert(&mut self, tile: usize) {
         if tile > 0 && tile <= self.max_tiles {
             self.bits.set(tile - 1, true);
@@ -38,6 +37,7 @@ impl TileBitset {
     }
 
     /// Test tile membership
+    #[must_use]
     pub fn contains(&self, tile: usize) -> bool {
         if tile > 0 {
             self.bits.get(tile - 1).as_deref() == Some(&true)
@@ -60,24 +60,26 @@ impl TileBitset {
     }
 
     /// Test if no tiles are present
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.bits.not_any()
     }
 
     /// Count tiles in the set
+    #[must_use]
     pub fn count(&self) -> usize {
         self.bits.count_ones()
     }
 
-    /// Extract all tile indices as a vector
-    ///
-    /// Returns 1-based indices matching the tile reference system
+    /// The tile references in the set, ascending
+    #[must_use]
     pub fn to_vec(&self) -> Vec<usize> {
         self.bits.iter_ones().map(|index| index + 1).collect()
     }
 
-    /// Convert from `HashSet` representation
-    pub fn from_hashset(set: &std::collections::HashSet<usize>, max_tiles: usize) -> Self {
+    /// Convert from a set of 1-based tile indices
+    #[must_use]
+    pub fn from_set(set: &BTreeSet<usize>, max_tiles: usize) -> Self {
         let mut bitset = Self::new(max_tiles);
         for &tile in set {
             bitset.insert(tile);

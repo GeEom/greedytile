@@ -71,7 +71,6 @@ mod tests {
     #[test]
     fn test_output_suffix_format() {
         assert!(OUTPUT_SUFFIX.starts_with('_'));
-        assert!(!OUTPUT_SUFFIX.is_empty());
         assert!(OUTPUT_SUFFIX.len() < 20);
     }
 

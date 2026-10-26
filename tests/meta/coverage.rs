@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
     use std::fs;
     use std::io;
     use std::path::Path;
@@ -12,13 +12,13 @@ mod tests {
 
         let src_paths = collect_relative_paths(src_dir, src_dir).unwrap_or_else(|error| {
             assert!(src_dir.exists(), "Failed to read src directory: {error}");
-            HashSet::new()
+            BTreeSet::new()
         });
 
         let test_paths = if tests_dir.exists() {
             collect_relative_paths(tests_dir, tests_dir).unwrap_or_default()
         } else {
-            HashSet::new()
+            BTreeSet::new()
         };
 
         let mut missing_tests = Vec::new();
@@ -54,13 +54,13 @@ mod tests {
 
         let src_paths = collect_relative_paths(src_dir, src_dir).unwrap_or_else(|error| {
             assert!(src_dir.exists(), "Failed to read src directory: {error}");
-            HashSet::new()
+            BTreeSet::new()
         });
 
         let test_paths = if tests_dir.exists() {
             collect_relative_paths(tests_dir, tests_dir).unwrap_or_default()
         } else {
-            HashSet::new()
+            BTreeSet::new()
         };
 
         let mut orphaned_tests = Vec::new();
@@ -86,8 +86,8 @@ mod tests {
         );
     }
 
-    fn collect_relative_paths(dir: &Path, base: &Path) -> Result<HashSet<String>, io::Error> {
-        let mut paths = HashSet::new();
+    fn collect_relative_paths(dir: &Path, base: &Path) -> Result<BTreeSet<String>, io::Error> {
+        let mut paths = BTreeSet::new();
 
         if dir.is_dir() {
             let entries = fs::read_dir(dir)?;

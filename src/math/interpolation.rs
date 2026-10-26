@@ -1,7 +1,4 @@
-//! Cubic spline interpolation for smooth curve fitting
-//!
-//! Implements natural spline boundary conditions where second derivatives
-//! are zero at the endpoints, providing smooth interpolation without oscillation
+//! Natural cubic splines, whose second derivative is zero at both ends
 
 use std::error::Error;
 use std::fmt;
@@ -28,10 +25,7 @@ impl InterpolationError {
     }
 }
 
-/// Cubic spline interpolation with natural boundary conditions
-///
-/// Provides C2 continuous interpolation through a set of data points
-/// using piecewise cubic polynomials
+/// A natural cubic spline: piecewise cubics, C2 continuous through every point
 #[derive(Debug, Clone)]
 pub struct Cubic {
     x_values: Vec<f64>,
@@ -40,14 +34,9 @@ pub struct Cubic {
 }
 
 impl Cubic {
-    /// Create a new cubic interpolation from x and y values
-    ///
+    /// Fit a spline through the points (`x_values[i]`, `y_values[i]`)
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - `x_values` and `y_values` have different lengths
-    /// - Fewer than 2 data points are provided
-    /// - Internal index access fails during spline calculation
+    /// Fails when the lengths differ or there are fewer than two points.
     pub fn new(x_values: Vec<f64>, y_values: Vec<f64>) -> Result<Self, InterpolationError> {
         if x_values.len() != y_values.len() {
             return Err(InterpolationError::new(
@@ -143,18 +132,9 @@ impl Cubic {
         })
     }
 
-    /// Evaluate the interpolation at point x
-    ///
-    /// Uses binary search to find the appropriate spline segment,
-    /// then evaluates the cubic polynomial for that segment.
-    /// Points outside the data range return the nearest boundary value.
-    ///
+    /// The spline's value at `x`, or the nearest end's value outside the points
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - No data points are available
-    /// - Internal index access fails
-    /// - The x values are not strictly increasing
+    /// Fails when there are no points or the x values do not increase.
     pub fn evaluate(&self, x: f64) -> Result<f64, InterpolationError> {
         let n = self.x_values.len();
         if n == 0 {
@@ -190,15 +170,15 @@ impl Cubic {
         let mut klo = 0;
         let mut khi = n - 1;
         while khi - klo > 1 {
-            let k = usize::midpoint(khi, klo);
-            let x_k = self
+            let mid = usize::midpoint(khi, klo);
+            let x_mid = self
                 .x_values
-                .get(k)
+                .get(mid)
                 .ok_or_else(|| InterpolationError::new("Invalid index"))?;
-            if *x_k > x {
-                khi = k;
+            if *x_mid > x {
+                khi = mid;
             } else {
-                klo = k;
+                klo = mid;
             }
         }
 
@@ -227,19 +207,21 @@ impl Cubic {
             .get(klo)
             .ok_or_else(|| InterpolationError::new("Invalid index"))?;
 
-        let h = x_khi - x_klo;
-        if h <= 0.0 {
+        let span = x_khi - x_klo;
+        if span <= 0.0 {
             // Binary search assumes strictly increasing x values
             return Err(InterpolationError::new(
                 "x values must be strictly increasing",
             ));
         }
 
-        let a = (x_khi - x) / h;
-        let b = (x - x_klo) / h;
+        let weight_lo = (x_khi - x) / span;
+        let weight_hi = (x - x_klo) / span;
 
-        Ok(a * y_klo
-            + b * y_khi
-            + ((a.powi(3) - a) * sd_klo + (b.powi(3) - b) * sd_khi) * h.powi(2) / 6.0)
+        Ok(weight_lo * y_klo
+            + weight_hi * y_khi
+            + ((weight_lo.powi(3) - weight_lo) * sd_klo + (weight_hi.powi(3) - weight_hi) * sd_khi)
+                * span.powi(2)
+                / 6.0)
     }
 }

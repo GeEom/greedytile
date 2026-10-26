@@ -20,11 +20,7 @@ pub enum AlgorithmError {
         reason: String,
     },
 
-    /// No valid position candidates during selection
-    ///
-    /// Occurs when all grid positions are either:
-    /// - Already filled with tiles
-    /// - Have zero entropy (no possible tiles)
+    /// No position could take a tile: each is filled or has zero entropy
     NoValidPositions {
         /// Algorithm iteration when this occurred
         iteration: usize,
@@ -160,17 +156,13 @@ pub struct ErrorContext {
 /// Enriches error messages with algorithm state information
 pub trait WithContext<T> {
     /// Add error context to a Result
-    ///
     /// # Errors
-    ///
-    /// Propagates the original error with additional context applied
+    /// Returns the original error with the context applied.
     fn with_context(self, context: ErrorContext) -> Result<T>;
 
     /// Add just the operation context
-    ///
     /// # Errors
-    ///
-    /// Propagates the original error with the operation context applied
+    /// Returns the original error with the operation named.
     fn with_operation(self, operation: &'static str) -> Result<T>;
 }
 
@@ -240,6 +232,7 @@ pub fn computation_error(operation: &'static str, reason: &impl ToString) -> Alg
 }
 
 /// Create a generic I/O error (temporary compatibility helper)
+#[must_use]
 pub fn io_error(msg: &str) -> AlgorithmError {
     AlgorithmError::InvalidParameter {
         parameter: "path",
@@ -253,7 +246,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_error_context() {
+    fn test_error_context() -> std::result::Result<(), String> {
         let result: std::result::Result<(), AlgorithmError> =
             Err(AlgorithmError::NoValidPositions {
                 iteration: 0,
@@ -265,12 +258,12 @@ mod tests {
             ..Default::default()
         };
 
-        let err = result.with_context(context).unwrap_err();
-        match err {
-            AlgorithmError::NoValidPositions { iteration, .. } => {
+        match result.with_context(context) {
+            Err(AlgorithmError::NoValidPositions { iteration, .. }) => {
                 assert_eq!(iteration, 99);
+                Ok(())
             }
-            _ => unreachable!("Expected NoValidPositions error type"),
+            other => Err(format!("expected NoValidPositions, got {other:?}")),
         }
     }
 }

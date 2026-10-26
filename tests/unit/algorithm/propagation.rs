@@ -8,12 +8,12 @@ mod tests {
     };
     use greedytile::spatial::GridState;
     use ndarray::Array4;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     // Tests duplicate forced positions are filtered by coordinates
     // Verified by removing the duplicate check in add_positions
     #[test]
-    fn test_forced_pipeline_deduplication() {
+    fn test_forced_pipeline_deduplication() -> crate::TestResult {
         let mut pipeline = ForcedPipeline::new();
 
         let positions = vec![
@@ -48,11 +48,24 @@ mod tests {
         ];
         pipeline.add_positions(duplicates);
 
-        assert_eq!(pipeline.take_next().unwrap().coordinates, [1, 2]);
-        assert_eq!(pipeline.take_next().unwrap().coordinates, [3, 4]);
-        assert_eq!(pipeline.take_next().unwrap().coordinates, [5, 6]);
-        assert_eq!(pipeline.take_next().unwrap().coordinates, [7, 8]);
+        assert_eq!(
+            pipeline.take_next().ok_or("pipeline ran out")?.coordinates,
+            [1, 2]
+        );
+        assert_eq!(
+            pipeline.take_next().ok_or("pipeline ran out")?.coordinates,
+            [3, 4]
+        );
+        assert_eq!(
+            pipeline.take_next().ok_or("pipeline ran out")?.coordinates,
+            [5, 6]
+        );
+        assert_eq!(
+            pipeline.take_next().ok_or("pipeline ran out")?.coordinates,
+            [7, 8]
+        );
         assert!(pipeline.take_next().is_none());
+        Ok(())
     }
 
     // Tests basic probability update and entropy calculation
@@ -92,7 +105,7 @@ mod tests {
             density_correction_steepness: 0.05,
             density_minimum_strength: 0.1,
             source_tiles: vec![],
-            tile_compatibility_rules: HashMap::new(),
+            tile_compatibility_rules: BTreeMap::new(),
         };
 
         update_probabilities_and_entropy(
@@ -133,53 +146,24 @@ mod tests {
     #[test]
     fn test_update_probabilities_and_entropy_complex() {
         let mut grid_state = GridState::new(5, 5, 3);
-
-        for row in 0..5 {
-            for col in 0..5 {
-                if let Some(prob) = grid_state.tile_probabilities.get_mut(0)
-                    && let Some(val) = prob.get_mut([row, col])
-                {
-                    *val = 0.8;
-                }
-                if let Some(prob) = grid_state.tile_probabilities.get_mut(1)
-                    && let Some(val) = prob.get_mut([row, col])
-                {
-                    *val = 1.2;
-                }
-                if let Some(prob) = grid_state.tile_probabilities.get_mut(2)
-                    && let Some(val) = prob.get_mut([row, col])
-                {
-                    *val = 0.6;
-                }
-                if let Some(val) = grid_state.entropy.get_mut([row, col]) {
-                    *val = 0.0;
-                }
-            }
+        for (probs, value) in grid_state
+            .tile_probabilities
+            .iter_mut()
+            .zip([0.8, 1.2, 0.6])
+        {
+            probs.fill(value);
         }
+        grid_state.entropy.fill(0.0);
 
-        let mut influence = Array4::<f64>::zeros((3, 3, 5, 5));
-        for selected in 0..3 {
-            for color in 0..3 {
-                for i in 0..5 {
-                    for j in 0..5 {
-                        let influence_val = if i == 0 && j == 0 {
-                            10.0
-                        } else if i == 0 && j == 4 {
-                            7.0
-                        } else if i == 4 && j == 0 {
-                            3.0
-                        } else if i == 4 && j == 4 {
-                            2.0
-                        } else {
-                            1.0
-                        };
-                        if let Some(val) = influence.get_mut([selected, color, i, j]) {
-                            *val = influence_val;
-                        }
-                    }
-                }
-            }
-        }
+        // Each corner of the 5x5 influence window has its own factor
+        let corner_factor = |cell: [usize; 2]| match cell {
+            [0, 0] => 10.0,
+            [0, 4] => 7.0,
+            [4, 0] => 3.0,
+            [4, 4] => 2.0,
+            _ => 1.0,
+        };
+        let influence = Array4::from_shape_fn((3, 3, 5, 5), |(_, _, i, j)| corner_factor([i, j]));
 
         let step_data = StepData {
             source_ratios: vec![0.33, 0.33, 0.34],
@@ -189,7 +173,7 @@ mod tests {
             density_correction_steepness: 0.05,
             density_minimum_strength: 0.1,
             source_tiles: vec![],
-            tile_compatibility_rules: HashMap::new(),
+            tile_compatibility_rules: BTreeMap::new(),
         };
 
         update_probabilities_and_entropy(
@@ -201,55 +185,18 @@ mod tests {
             &step_data,
         );
 
-        let expected_val_0_0 = 0.8 * 10.0;
-        assert!(
-            grid_state
-                .tile_probabilities
-                .first()
-                .and_then(|probs| probs.get([0, 0]))
-                .is_some_and(|&v| (v - expected_val_0_0).abs() < 1e-10),
-            "Position [0,0] should receive high influence value 10.0"
-        );
-
-        let expected_val_0_4 = 0.8 * 7.0;
-        assert!(
-            grid_state
-                .tile_probabilities
-                .first()
-                .and_then(|probs| probs.get([0, 4]))
-                .is_some_and(|&v| (v - expected_val_0_4).abs() < 1e-10),
-            "Position [0,4] should receive high influence value 7.0"
-        );
-
-        let expected_val_4_0 = 0.8 * 3.0;
-        assert!(
-            grid_state
-                .tile_probabilities
-                .first()
-                .and_then(|probs| probs.get([4, 0]))
-                .is_some_and(|&v| (v - expected_val_4_0).abs() < 1e-10),
-            "Position [4,0] should receive medium influence value 3.0"
-        );
-
-        let expected_val_4_4 = 0.8 * 2.0;
-        assert!(
-            grid_state
-                .tile_probabilities
-                .first()
-                .and_then(|probs| probs.get([4, 4]))
-                .is_some_and(|&v| (v - expected_val_4_4).abs() < 1e-10),
-            "Position [4,4] should receive low influence value 2.0"
-        );
-
-        let expected_val_default = 0.8 * 1.0;
-        assert!(
-            grid_state
-                .tile_probabilities
-                .first()
-                .and_then(|probs| probs.get([1, 1]))
-                .is_some_and(|&v| (v - expected_val_default).abs() < 1e-10),
-            "Position [1,1] should receive default influence value 1.0"
-        );
+        for cell in [[0, 0], [0, 4], [4, 0], [4, 4], [1, 1]] {
+            let expected = 0.8 * corner_factor(cell);
+            assert!(
+                grid_state
+                    .tile_probabilities
+                    .first()
+                    .and_then(|probs| probs.get(cell))
+                    .is_some_and(|&v| (v - expected).abs() < 1e-10),
+                "Position {cell:?} should be scaled by {}",
+                corner_factor(cell)
+            );
+        }
     }
 
     // Tests edge case where mean probability approaches zero
@@ -297,7 +244,7 @@ mod tests {
             density_correction_steepness: 0.05,
             density_minimum_strength: 0.1,
             source_tiles: vec![],
-            tile_compatibility_rules: HashMap::new(),
+            tile_compatibility_rules: BTreeMap::new(),
         };
 
         update_probabilities_and_entropy(

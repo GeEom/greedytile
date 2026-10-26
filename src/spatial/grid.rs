@@ -1,12 +1,9 @@
-//! Grid state management with dynamic extension and spatial data structures
-//!
-//! Provides a unified interface for managing wave function collapse state including
-//! probabilities, entropy, adjacency weights, and deadlock resolution counters.
-//! The grid automatically extends when tile placement exceeds current bounds.
+//! The generation grid, which grows when a placement nears its edge
 
 use ndarray::{Array2, Array3};
 use num_traits::{NumAssign, One};
 
+use crate::math::convert::usize_to_i32;
 use crate::spatial::extension::{
     Extendable, calculate_extension, extend_array_2d, extend_array_3d,
 };
@@ -22,6 +19,7 @@ pub struct BoundingBox {
 
 impl BoundingBox {
     /// Check if a position is within the bounds
+    #[must_use]
     pub const fn contains(&self, pos: [i32; 2]) -> bool {
         pos[0] >= self.min[0]
             && pos[0] <= self.max[0]
@@ -30,11 +28,8 @@ impl BoundingBox {
     }
 }
 
-/// Grid state containing all wave function collapse data structures
-///
-/// Maintains separate 2D arrays for different state aspects to improve
-/// cache locality and enable selective updates. The grid coordinates use
-/// an offset system to support negative indices during extension.
+/// One 2D array per kind of state; an offset maps world coordinates, which
+/// may be negative, to array indices
 #[derive(Debug, Clone)]
 pub struct GridState {
     /// Probability values for each tile type (indexed by `tile_type`, `row`, `col`)
@@ -66,10 +61,8 @@ pub struct GridState {
 }
 
 impl GridState {
-    /// Create a new grid state with initial dimensions
-    ///
-    /// Initializes all probability matrices to 1.0 (maximum uncertainty)
-    /// and other state arrays to appropriate default values.
+    /// A `rows` x `cols` grid with every probability at 1.0, the most uncertain
+    #[must_use]
     pub fn new(rows: usize, cols: usize, unique_cell_count: usize) -> Self {
         let dimensions = (rows, cols);
 
@@ -98,24 +91,23 @@ impl GridState {
     }
 
     /// Get the number of rows in the grid
+    #[must_use]
     pub const fn rows(&self) -> usize {
         self.dimensions.0
     }
 
     /// Get the number of columns in the grid
+    #[must_use]
     pub const fn cols(&self) -> usize {
         self.dimensions.1
     }
 
-    /// Extend the grid if needed to accommodate a position plus radius
-    ///
-    /// Returns the new offset and whether extension occurred. Extension preserves
-    /// all existing data while adding padding with appropriate default values.
-    /// The offset is adjusted to maintain consistent coordinate mapping.
+    /// Grow the grid to hold `coordinates` plus `radius`, within any generation bounds;
+    /// returns the new offset and whether it grew
     pub fn extend_if_needed(
         &mut self,
         offset: [i32; 2],
-        coordinates: &[i32; 2],
+        coordinates: [i32; 2],
         radius: i32,
     ) -> ([i32; 2], bool) {
         let mut extension_info =
@@ -156,65 +148,60 @@ impl GridState {
     }
 
     /// Constrain extension to respect generation bounds
-    const fn constrain_extension(
+    fn constrain_extension(
         &self,
         mut extension_info: crate::spatial::extension::ExtensionInfo,
         bounds: &BoundingBox,
         offset: [i32; 2],
     ) -> crate::spatial::extension::ExtensionInfo {
-        // Calculate current grid bounds in world coordinates
         let current_min = [-offset[0], -offset[1]];
 
-        // Calculate what the new bounds would be after extension
         let new_min = [
-            current_min[0] - extension_info.pad_left as i32,
-            current_min[1] - extension_info.pad_top as i32,
+            current_min[0] - usize_to_i32(extension_info.pad_left),
+            current_min[1] - usize_to_i32(extension_info.pad_top),
         ];
 
         // Constrain extension to not exceed generation bounds
         if new_min[0] < bounds.min[0] {
-            let excess = (bounds.min[0] - new_min[0]) as usize;
+            let excess = usize::try_from(bounds.min[0] - new_min[0]).unwrap_or(0);
             extension_info.pad_left = extension_info.pad_left.saturating_sub(excess);
         }
 
         if new_min[1] < bounds.min[1] {
-            let excess = (bounds.min[1] - new_min[1]) as usize;
+            let excess = usize::try_from(bounds.min[1] - new_min[1]).unwrap_or(0);
             extension_info.pad_top = extension_info.pad_top.saturating_sub(excess);
         }
 
-        // Similar constraints for max bounds
         let current_max = [
-            current_min[0] + self.rows() as i32 - 1,
-            current_min[1] + self.cols() as i32 - 1,
+            current_min[0] + usize_to_i32(self.rows()) - 1,
+            current_min[1] + usize_to_i32(self.cols()) - 1,
         ];
 
         let new_max = [
-            current_max[0] + extension_info.pad_right as i32,
-            current_max[1] + extension_info.pad_bottom as i32,
+            current_max[0] + usize_to_i32(extension_info.pad_right),
+            current_max[1] + usize_to_i32(extension_info.pad_bottom),
         ];
 
         if new_max[0] > bounds.max[0] {
-            let excess = (new_max[0] - bounds.max[0]) as usize;
+            let excess = usize::try_from(new_max[0] - bounds.max[0]).unwrap_or(0);
             extension_info.pad_right = extension_info.pad_right.saturating_sub(excess);
         }
 
         if new_max[1] > bounds.max[1] {
-            let excess = (new_max[1] - bounds.max[1]) as usize;
+            let excess = usize::try_from(new_max[1] - bounds.max[1]).unwrap_or(0);
             extension_info.pad_bottom = extension_info.pad_bottom.saturating_sub(excess);
         }
 
-        // Recalculate if extension is still needed
         extension_info.needs_extension = extension_info.pad_left
             + extension_info.pad_right
             + extension_info.pad_top
             + extension_info.pad_bottom
             > 0;
 
-        // Update offset if extension occurs
         if extension_info.needs_extension {
             extension_info.new_offset = [
-                offset[0] + extension_info.pad_left as i32,
-                offset[1] + extension_info.pad_top as i32,
+                offset[0] + usize_to_i32(extension_info.pad_left),
+                offset[1] + usize_to_i32(extension_info.pad_top),
             ];
         } else {
             extension_info.new_offset = offset;
@@ -224,58 +211,51 @@ impl GridState {
     }
 }
 
-/// Get region spans for a given position and radius
-///
-/// Converts world coordinates to grid indices and returns ranges for
-/// iteration. Automatically clamps to valid grid bounds.
+/// Index ranges covering `radius` around world `coordinates`, clamped at zero
+#[must_use]
 pub const fn get_region_spans(
-    offset: &[i32; 2],
-    coordinates: &[i32; 2],
+    offset: [i32; 2],
+    coordinates: [i32; 2],
     radius: i32,
 ) -> (std::ops::Range<usize>, std::ops::Range<usize>) {
     let index = [coordinates[0] + offset[0], coordinates[1] + offset[1]];
 
-    // Calculate bounds with proper handling of negative values
     let row_start = if index[0] - radius < 0 {
         0
     } else {
-        (index[0] - radius) as usize
+        (index[0] - radius).unsigned_abs() as usize
     };
 
     let col_start = if index[1] - radius < 0 {
         0
     } else {
-        (index[1] - radius) as usize
+        (index[1] - radius).unsigned_abs() as usize
     };
 
-    // For the end bounds, we need to ensure they're non-negative before casting
+    // Each value is non-negative where it is converted, so its magnitude is the value
     let row_end = if index[0] + radius + 1 < 0 {
         0
     } else {
-        (index[0] + radius + 1) as usize
+        (index[0] + radius + 1).unsigned_abs() as usize
     };
 
     let col_end = if index[1] + radius + 1 < 0 {
         0
     } else {
-        (index[1] + radius + 1) as usize
+        (index[1] + radius + 1).unsigned_abs() as usize
     };
 
     (row_start..row_end, col_start..col_end)
 }
 
-/// Generic matrix extension for 3D arrays
+/// Grow a stack of matrices to hold `coordinates` plus `radius`
 ///
-/// Used for legacy compatibility with older matrix representations.
-/// Prefer `GridState::extend_if_needed` for new code.
-///
-/// # Panics
-///
-/// Panics if dimensions exceed `i32::MAX`
+/// Kept for older callers; [`GridState::extend_if_needed`] is the usual route.
+#[must_use]
 pub fn extend_matrices<T>(
     matrices: Array3<T>,
     offset: [i32; 2],
-    coordinates: &[i32; 2],
+    coordinates: [i32; 2],
     radius: i32,
 ) -> (Array3<T>, [i32; 2])
 where

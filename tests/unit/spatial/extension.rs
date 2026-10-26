@@ -24,7 +24,7 @@ mod tests {
         let coordinates = [2, 2];
         let radius = 2;
 
-        let info = calculate_extension(current_dims, offset, &coordinates, radius);
+        let info = calculate_extension(current_dims, offset, coordinates, radius);
 
         assert!(!info.needs_extension);
         assert_eq!(info.pad_left, 0);
@@ -43,7 +43,7 @@ mod tests {
         let coordinates = [8, 8];
         let radius = 2;
 
-        let info = calculate_extension(current_dims, offset, &coordinates, radius);
+        let info = calculate_extension(current_dims, offset, coordinates, radius);
 
         assert!(info.needs_extension);
         assert_eq!(info.pad_left, 0);
@@ -62,7 +62,7 @@ mod tests {
         let coordinates = [-3, -3];
         let radius = 2;
 
-        let info = calculate_extension(current_dims, offset, &coordinates, radius);
+        let info = calculate_extension(current_dims, offset, coordinates, radius);
 
         assert!(info.needs_extension);
         assert_eq!(info.pad_left, 3);
@@ -75,7 +75,7 @@ mod tests {
     // Tests 2D array with no extension needed
     // Verified by removing early return optimization
     #[test]
-    fn test_extend_array_2d_no_extension() {
+    fn test_extend_array_2d_no_extension() -> crate::TestResult {
         let mut array = Array2::from_elem((3, 3), 5.0);
         if let Some(elem) = array.get_mut([0, 0]) {
             *elem = 1.0;
@@ -100,12 +100,21 @@ mod tests {
 
         assert_eq!(extended.dim(), (3, 3));
 
-        assert!((*extended.get([0, 0]).unwrap() - 1.0_f64).abs() < f64::EPSILON);
-        assert!((*extended.get([1, 1]).unwrap() - 2.0_f64).abs() < f64::EPSILON);
-        assert!((*extended.get([2, 2]).unwrap() - 3.0_f64).abs() < f64::EPSILON);
-        assert!((*extended.get([0, 1]).unwrap() - 5.0_f64).abs() < f64::EPSILON);
+        assert!(
+            (*extended.get([0, 0]).ok_or("cell outside array")? - 1.0_f64).abs() < f64::EPSILON
+        );
+        assert!(
+            (*extended.get([1, 1]).ok_or("cell outside array")? - 2.0_f64).abs() < f64::EPSILON
+        );
+        assert!(
+            (*extended.get([2, 2]).ok_or("cell outside array")? - 3.0_f64).abs() < f64::EPSILON
+        );
+        assert!(
+            (*extended.get([0, 1]).ok_or("cell outside array")? - 5.0_f64).abs() < f64::EPSILON
+        );
 
         assert_eq!(extended, array);
+        Ok(())
     }
 
     // Tests 2D array padding with values preserved
@@ -149,7 +158,7 @@ mod tests {
     // Tests 3D array with no extension needed
     // Verified by removing early return optimization
     #[test]
-    fn test_extend_array_3d_no_extension() {
+    fn test_extend_array_3d_no_extension() -> crate::TestResult {
         let mut array = Array3::from_elem((2, 3, 3), 5.0);
         if let Some(elem) = array.get_mut([0, 0, 0]) {
             *elem = 1.0;
@@ -177,13 +186,24 @@ mod tests {
 
         assert_eq!(extended.dim(), (2, 3, 3));
 
-        assert!((*extended.get([0, 0, 0]).unwrap() - 1.0_f64).abs() < f64::EPSILON);
-        assert!((*extended.get([0, 1, 1]).unwrap() - 2.0_f64).abs() < f64::EPSILON);
-        assert!((*extended.get([1, 2, 2]).unwrap() - 3.0_f64).abs() < f64::EPSILON);
-        assert!((*extended.get([1, 0, 0]).unwrap() - 4.0_f64).abs() < f64::EPSILON);
-        assert!((*extended.get([0, 0, 1]).unwrap() - 5.0_f64).abs() < f64::EPSILON);
+        assert!(
+            (*extended.get([0, 0, 0]).ok_or("cell outside array")? - 1.0_f64).abs() < f64::EPSILON
+        );
+        assert!(
+            (*extended.get([0, 1, 1]).ok_or("cell outside array")? - 2.0_f64).abs() < f64::EPSILON
+        );
+        assert!(
+            (*extended.get([1, 2, 2]).ok_or("cell outside array")? - 3.0_f64).abs() < f64::EPSILON
+        );
+        assert!(
+            (*extended.get([1, 0, 0]).ok_or("cell outside array")? - 4.0_f64).abs() < f64::EPSILON
+        );
+        assert!(
+            (*extended.get([0, 0, 1]).ok_or("cell outside array")? - 5.0_f64).abs() < f64::EPSILON
+        );
 
         assert_eq!(extended, array);
+        Ok(())
     }
 
     // Tests 3D array padding with values preserved

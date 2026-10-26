@@ -4,7 +4,7 @@
 mod tests {
     use greedytile::algorithm::feasibility::FeasibilityCountLayer;
     use greedytile::spatial::tiles::Tile;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     // Tests new layer has fraction 1.0 everywhere
     // Verified by initializing counts with 0 instead of tile_count
@@ -26,7 +26,7 @@ mod tests {
             [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
             [[9, 8, 7], [6, 5, 4], [3, 2, 1]],
         ];
-        let mut dispatch_rules = HashMap::new();
+        let mut dispatch_rules = BTreeMap::new();
         dispatch_rules.insert(vec![0; 10], vec![1, 2]);
 
         let tile_grid = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
@@ -60,7 +60,7 @@ mod tests {
             [[3, 4, 5], [6, 7, 8], [9, 1, 2]],
         ];
 
-        let mut dispatch_rules = HashMap::new();
+        let mut dispatch_rules = BTreeMap::new();
         dispatch_rules.insert(vec![0; 10], vec![1, 2, 3]);
 
         let tile_grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
@@ -82,7 +82,7 @@ mod tests {
             [[9, 8, 7], [6, 5, 4], [3, 2, 1]],
         ];
 
-        let mut dispatch_rules = HashMap::new();
+        let mut dispatch_rules = BTreeMap::new();
         dispatch_rules.insert(vec![1, 1, 0, 1, 1, 0, 1, 1, 0, 0], vec![1, 2, 3]);
 
         let tile_grid = [[1, 2, 0], [4, 5, 0], [7, 8, 0]];
@@ -109,7 +109,7 @@ mod tests {
         let mut layer = FeasibilityCountLayer::new(3, 3, 10);
 
         let source_tiles: Vec<Tile> = vec![[[1; 3]; 3]];
-        let dispatch_rules = HashMap::new();
+        let dispatch_rules = BTreeMap::new();
         let tile_grid = [[1; 3]; 3];
 
         layer.update_count(1, 1, &tile_grid, &source_tiles, &dispatch_rules, 10);

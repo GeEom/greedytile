@@ -16,12 +16,14 @@ use crate::{
     io::analysis::AnalysisCapture,
     io::prefill::{PrefillData, PrefillPlacement},
     io::visualization::VisualizationCapture,
+    math::convert::{usize_to_f64, usize_to_i32},
     math::probability::binomial_normal_approximate_cdf,
     spatial::GridState,
     spatial::tiles::TileExtractor,
 };
 use ndarray::Array4;
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use std::io::Write;
 
 /// Algorithm parameters controlling pattern extraction and selection behavior
 #[derive(Clone, Copy, Debug)]
@@ -44,32 +46,40 @@ pub struct AlgorithmConfig {
     pub bounds: Option<(usize, usize)>,
 }
 
-/// Load source image and initialize all algorithm data structures
-///
+/// Algorithm state built from the bundled source image
+pub struct InitialData {
+    /// Algorithm parameters and source pattern data
+    pub step_data: StepData,
+    /// Grid holding the first placement's surroundings
+    pub grid_state: GridState,
+    /// Offset for coordinate system transformations
+    pub system_offset: [i32; 2],
+    /// 4D probability influence matrices for pattern matching
+    pub probability_influence_matrices: Array4<f64>,
+    /// Tile reference chosen for the first placement
+    pub selected_cell_reference: usize,
+    /// Coordinates of the first placement
+    pub selection_coordinates: [i32; 2],
+    /// Count of each tile type selected, all zero
+    pub selection_tally: Vec<usize>,
+    /// RGBA color for each tile type
+    pub color_mapping: Vec<[u8; 4]>,
+}
+
+/// Build the starting state from `data/a.png`
 /// # Errors
-///
-/// Returns an error if:
-/// - The source PNG file cannot be loaded or processed
-/// - Pattern statistics preprocessing fails
+/// Fails when the image cannot load or its statistics cannot be computed.
 pub fn load_and_initialize_data(
     seed: u64,
     include_rotations: bool,
     include_reflections: bool,
-) -> crate::io::error::Result<(
-    StepData,
-    GridState,
-    [i32; 2],
-    Array4<f64>,
-    usize,
-    [i32; 2],
-    Vec<usize>,
-    Vec<[u8; 4]>,
-)> {
+) -> crate::io::error::Result<InitialData> {
     let image_processor = ImageProcessor::from_png_file("data/a.png")?;
 
     let source_ratios = image_processor.source_ratios().to_vec();
     let unique_cell_count = image_processor.unique_cell_count();
-    let grid_extension_radius = image_processor.grid_extension_radius() as i32;
+    let extension_radius = image_processor.grid_extension_radius();
+    let grid_extension_radius = usize_to_i32(extension_radius);
     let pattern_influence_distance = image_processor.pattern_influence_distance();
     let color_mapping = image_processor.color_mapping().to_vec();
 
@@ -88,14 +98,15 @@ pub fn load_and_initialize_data(
     let source_tiles = tile_extractor.source_tiles().to_vec();
     let tile_compatibility_rules = tile_extractor.get_boolean_reference_rules().clone();
 
-    let exponential_sample_points =
-        TileExtractor::calculate_exponential_sample_points(pattern_influence_distance as f64);
+    let exponential_sample_points = TileExtractor::calculate_exponential_sample_points(
+        usize_to_f64(pattern_influence_distance),
+    );
 
-    let mut statistics_processor = Processor::new(
+    let statistics_processor = Processor::new(
         source_data_2d,
         source_ratios.clone(),
         pattern_influence_distance,
-        grid_extension_radius as usize,
+        extension_radius,
     );
 
     let probability_influence_matrices =
@@ -111,7 +122,7 @@ pub fn load_and_initialize_data(
     let mut grid_state = GridState::new(1, 1, unique_cell_count);
 
     let (new_offset, _) =
-        grid_state.extend_if_needed(system_offset, &selection_coordinates, grid_extension_radius);
+        grid_state.extend_if_needed(system_offset, selection_coordinates, grid_extension_radius);
     system_offset = new_offset;
 
     let step_data = StepData {
@@ -125,7 +136,7 @@ pub fn load_and_initialize_data(
         tile_compatibility_rules,
     };
 
-    Ok((
+    Ok(InitialData {
         step_data,
         grid_state,
         system_offset,
@@ -134,7 +145,7 @@ pub fn load_and_initialize_data(
         selection_coordinates,
         selection_tally,
         color_mapping,
-    ))
+    })
 }
 
 /// Seeded random selector for reproducible stochastic choices
@@ -144,15 +155,14 @@ pub struct RandomSelector {
 
 impl RandomSelector {
     /// Create a deterministic random selector
+    #[must_use]
     pub fn new(seed: u64) -> Self {
         Self {
             rng: StdRng::seed_from_u64(seed),
         }
     }
 
-    /// Generic weighted random selection
-    ///
-    /// Returns index into weights array using cumulative distribution
+    /// Draw an index with probability proportional to its weight
     pub fn weighted_choice(&mut self, weights: &[f64]) -> usize {
         let total: f64 = weights.iter().sum();
         if total <= 0.0 {
@@ -169,9 +179,7 @@ impl RandomSelector {
         weights.len() - 1
     }
 
-    /// Random selection of an index for logarithmic weights
-    ///
-    /// Converts to probabilities using log-sum-exp trick, then selects based on cumulative probability distribution
+    /// Draw an index by log weight, shifted by the largest so `exp` cannot overflow
     pub fn log_weighted_choice(&mut self, log_weights: &[f64]) -> usize {
         if log_weights.is_empty() {
             return 0;
@@ -241,10 +249,7 @@ struct PlacementDecision {
     tile_reference: usize,
 }
 
-/// Wave function collapse algorithm executor with information-theoretic tile selection
-///
-/// Manages the complete algorithm state including grid expansion, probability
-/// propagation, forced position detection, and deadlock resolution.
+/// Runs generation one placement at a time, holding all of its state
 pub struct GreedyStochastic {
     /// Algorithm parameters and source pattern data
     pub step_data: StepData,
@@ -285,15 +290,11 @@ pub struct GreedyStochastic {
 }
 
 impl GreedyStochastic {
-    /// Create a new executor with initialized data
-    ///
+    /// An executor for `data/a.png` with default settings
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - Data initialization fails (e.g., source image cannot be loaded)
-    /// - Pattern statistics preprocessing fails
+    /// Fails when the image cannot load or its statistics cannot be computed.
     pub fn new(seed: u64) -> crate::io::error::Result<Self> {
-        let (
+        let InitialData {
             step_data,
             grid_state,
             system_offset,
@@ -302,7 +303,7 @@ impl GreedyStochastic {
             selection_coordinates,
             selection_tally,
             color_mapping,
-        ) = load_and_initialize_data(seed, false, false)?;
+        } = load_and_initialize_data(seed, false, false)?;
 
         let feasibility_layer = FeasibilityCountLayer::new(
             grid_state.rows(),
@@ -337,13 +338,9 @@ impl GreedyStochastic {
         })
     }
 
-    /// Create a new executor from an `ImageProcessor` with custom configuration
-    ///
+    /// An executor for a loaded image with the given configuration
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - Pattern statistics preprocessing fails
-    /// - Grid initialization fails
+    /// Fails when the image's statistics cannot be computed.
     pub fn from_image_processor(
         image_processor: ImageProcessor,
         config: AlgorithmConfig,
@@ -364,10 +361,10 @@ impl GreedyStochastic {
         let tile_compatibility_rules = tile_extractor.get_boolean_reference_rules().clone();
 
         let exponential_sample_points = TileExtractor::calculate_exponential_sample_points(
-            config.pattern_influence_distance as f64,
+            usize_to_f64(config.pattern_influence_distance),
         );
 
-        let mut statistics_processor = Processor::new(
+        let statistics_processor = Processor::new(
             source_data_2d,
             source_ratios.clone(),
             config.pattern_influence_distance,
@@ -388,8 +385,8 @@ impl GreedyStochastic {
 
         // Calculate generation bounds if specified
         if let Some((width, height)) = config.bounds {
-            let half_width = width as i32 / 2;
-            let half_height = height as i32 / 2;
+            let half_width = usize_to_i32(width) / 2;
+            let half_height = usize_to_i32(height) / 2;
             grid_state.generation_bounds = Some(crate::spatial::grid::BoundingBox {
                 min: [-half_width, -half_height],
                 max: [half_width - 1, half_height - 1],
@@ -398,15 +395,15 @@ impl GreedyStochastic {
 
         let (new_offset, _) = grid_state.extend_if_needed(
             system_offset,
-            &selection_coordinates,
-            config.grid_extension_radius as i32,
+            selection_coordinates,
+            usize_to_i32(config.grid_extension_radius),
         );
         system_offset = new_offset;
 
         let step_data = StepData {
             source_ratios,
             unique_cell_count,
-            grid_extension_radius: config.grid_extension_radius as i32,
+            grid_extension_radius: usize_to_i32(config.grid_extension_radius),
             density_correction_threshold: 0.10,
             density_correction_steepness: 0.05,
             density_minimum_strength: 0.10,
@@ -448,27 +445,24 @@ impl GreedyStochastic {
     }
 
     /// Access the current grid state
+    #[must_use]
     pub const fn grid_state(&self) -> &GridState {
         &self.grid_state
     }
 
     /// Access tile color mapping
+    #[must_use]
     pub fn color_mapping(&self) -> &[[u8; 4]] {
         &self.color_mapping
     }
 
-    /// Apply prefill data before starting generation
-    ///
+    /// Queue prefill placements, growing the grid and any bounds to hold them
     /// # Errors
-    ///
-    /// Returns an error if the operation fails
-    #[allow(clippy::print_stderr)]
+    /// Fails when the bounds warning cannot be written to stderr.
     pub fn apply_prefill(&mut self, prefill_data: PrefillData) -> crate::io::error::Result<()> {
-        // Ensure grid contains prefill bounds
         let min_coords = prefill_data.bounds.min;
         let max_coords = prefill_data.bounds.max;
 
-        // Check all corners of the prefill bounds
         for &corner in &[
             min_coords,
             max_coords,
@@ -477,23 +471,24 @@ impl GreedyStochastic {
         ] {
             let (new_offset, _) = self.grid_state.extend_if_needed(
                 self.system_offset,
-                &corner,
+                corner,
                 self.step_data.grid_extension_radius,
             );
             self.system_offset = new_offset;
         }
 
-        // Update generation bounds if necessary
         if let Some(gen_bounds) = &mut self.grid_state.generation_bounds
             && (!gen_bounds.contains(min_coords) || !gen_bounds.contains(max_coords))
         {
-            // Expand bounds to include prefill
             gen_bounds.min[0] = gen_bounds.min[0].min(min_coords[0]);
             gen_bounds.min[1] = gen_bounds.min[1].min(min_coords[1]);
             gen_bounds.max[0] = gen_bounds.max[0].max(max_coords[0]);
             gen_bounds.max[1] = gen_bounds.max[1].max(max_coords[1]);
 
-            eprintln!("Warning: Generation bounds expanded to accommodate prefill image");
+            writeln!(
+                std::io::stderr().lock(),
+                "Warning: Generation bounds expanded to accommodate prefill image"
+            )?;
         }
 
         self.prefill_data = Some(prefill_data);
@@ -519,12 +514,8 @@ impl GreedyStochastic {
     }
 
     /// Export visualization as GIF if enabled
-    ///
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - Visualization was not enabled
-    /// - GIF export fails
+    /// Fails when visualization is off or the GIF cannot be written.
     pub fn export_visualization(&self, output_path: &str) -> crate::io::error::Result<()> {
         self.visualization.as_ref().map_or_else(
             || {
@@ -538,39 +529,27 @@ impl GreedyStochastic {
         )
     }
 
-    /// Execute a single iteration of the algorithm
-    ///
+    /// Same as [`Self::run_iteration`]
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - No valid positions are found for tile placement
-    /// - No viable tiles exist at the selected position
+    /// Fails when no position can take a tile.
     pub fn execute_iteration(&mut self) -> crate::io::error::Result<bool> {
         self.run_iteration()
     }
 
-    /// Run a single iteration of the algorithm
-    ///
+    /// Place one tile; returns false once the bounds are full
     /// # Errors
-    ///
-    /// Returns an error if:
-    /// - No valid positions are found for tile placement
-    /// - No viable tiles exist at the selected position
+    /// Fails when no position can take a tile.
     pub fn run_iteration(&mut self) -> crate::io::error::Result<bool> {
         self.iteration += 1;
 
-        // Phase 1: Check if we're already complete
         if self.check_completion() {
             return Ok(false);
         }
 
-        // Phase 2: Determine what to place this iteration
         let decision = self.get_placement_decision()?;
 
-        // Phase 3: Place the tile
         self.place_tile(decision);
 
-        // Phase 4: Post-placement updates
         self.post_placement_updates();
 
         Ok(true)
@@ -587,12 +566,10 @@ impl GreedyStochastic {
             });
         }
 
-        // Check prefill queue
+        // Prefill comes first, then forced positions, then a weighted draw
         if let Some(prefill) = &mut self.prefill_data {
             while let Some(placement) = prefill.next_placement() {
-                // Validate that the prefill position is still empty
-                let row = (placement.world_position[0] + self.system_offset[0]) as usize;
-                let col = (placement.world_position[1] + self.system_offset[1]) as usize;
+                let [row, col] = grid_index(placement.world_position, self.system_offset);
 
                 let is_valid = if row < self.grid_state.rows() && col < self.grid_state.cols() {
                     self.grid_state
@@ -611,15 +588,11 @@ impl GreedyStochastic {
                         tile_reference: placement.tile_reference,
                     });
                 }
-                // If not valid, skip this prefill position and try the next one
             }
         }
 
-        // Check forced pipeline
         while let Some(forced) = self.forced_pipeline.take_next() {
-            // Validate that the forced position is still empty
-            let row = (forced.coordinates[0] + self.system_offset[0]) as usize;
-            let col = (forced.coordinates[1] + self.system_offset[1]) as usize;
+            let [row, col] = grid_index(forced.coordinates, self.system_offset);
 
             let is_valid = if row < self.grid_state.rows() && col < self.grid_state.cols() {
                 self.grid_state
@@ -638,10 +611,8 @@ impl GreedyStochastic {
                     tile_reference: forced.tile_reference,
                 });
             }
-            // If not valid, skip this forced position and try the next one
         }
 
-        // Otherwise do random selection
         self.select_random_position()
     }
 
@@ -655,26 +626,20 @@ impl GreedyStochastic {
         );
 
         let adjacency_candidates = top_k_valid_indices(
-            &weight_result.adjacency_matrix,
-            &weight_result.validity_matrix,
+            &weight_result.adjacency,
+            &weight_result.validity,
             ADJACENCY_CANDIDATES_CONSIDERED,
         );
 
         let selection_candidates = top_k_from_indices(
-            &weight_result.weight_matrix,
+            &weight_result.weights,
             &adjacency_candidates,
             CANDIDATES_CONSIDERED,
         );
 
         let candidate_weights: Vec<f64> = selection_candidates
             .iter()
-            .map(|&[i, j]| {
-                weight_result
-                    .weight_matrix
-                    .get([i, j])
-                    .copied()
-                    .unwrap_or(0.0)
-            })
+            .map(|&[i, j]| weight_result.weights.get([i, j]).copied().unwrap_or(0.0))
             .collect();
 
         if selection_candidates.is_empty() {
@@ -691,8 +656,8 @@ impl GreedyStochastic {
             .unwrap_or([0, 0]);
 
         let world_position = [
-            selected_pos[0] as i32 - self.system_offset[0],
-            selected_pos[1] as i32 - self.system_offset[1],
+            usize_to_i32(selected_pos[0]) - self.system_offset[0],
+            usize_to_i32(selected_pos[1]) - self.system_offset[1],
         ];
 
         let viable_tiles = compute_viable_tiles_at_position(
@@ -705,7 +670,6 @@ impl GreedyStochastic {
         );
 
         if viable_tiles.is_empty() {
-            // Trigger deadlock resolution
             self.resolve_deadlock(selected_pos, self.iteration);
             self.forced_pipeline = ForcedPipeline::default();
 
@@ -753,19 +717,16 @@ impl GreedyStochastic {
 
     /// Place a tile and update all state
     fn place_tile(&mut self, decision: PlacementDecision) {
-        // Update tally
         if let Some(tally) = self.selection_tally.get_mut(decision.tile_reference - 1) {
             *tally += 1;
         }
 
-        // Set current selection state
         self.selected_cell_reference = decision.tile_reference;
         self.selection_coordinates = decision.world_position;
 
-        // Extend grid if needed
         let (new_offset, extended) = self.grid_state.extend_if_needed(
             self.system_offset,
-            &decision.world_position,
+            decision.world_position,
             self.step_data.grid_extension_radius,
         );
         self.system_offset = new_offset;
@@ -775,7 +736,6 @@ impl GreedyStochastic {
                 .extend_to(self.grid_state.rows(), self.grid_state.cols());
         }
 
-        // Update all state matrices
         update_probabilities_and_entropy(
             &mut self.grid_state,
             &self.probability_influence_matrices,
@@ -815,7 +775,6 @@ impl GreedyStochastic {
 
     /// Perform post-placement updates
     fn post_placement_updates(&mut self) {
-        // Detect new forced positions
         let new_forced = detect_forced_positions(
             &self.grid_state,
             self.selection_coordinates,
@@ -827,7 +786,6 @@ impl GreedyStochastic {
 
         self.forced_pipeline.add_positions(new_forced);
 
-        // Check for contradictions
         if let Some(contradiction_pos) = check_for_contradiction(
             &self.grid_state,
             self.system_offset,
@@ -846,8 +804,8 @@ impl GreedyStochastic {
             .as_ref()
             .is_some_and(|bounds| {
                 let filled_positions = self.selection_tally.iter().sum::<usize>();
-                let width = (bounds.max[0] - bounds.min[0] + 1) as usize;
-                let height = (bounds.max[1] - bounds.min[1] + 1) as usize;
+                let width = usize::try_from(bounds.max[0] - bounds.min[0] + 1).unwrap_or(0);
+                let height = usize::try_from(bounds.max[1] - bounds.min[1] + 1).unwrap_or(0);
                 let positions_in_bounds = width * height;
 
                 filled_positions >= positions_in_bounds
@@ -857,14 +815,16 @@ impl GreedyStochastic {
     /// Unlock tiles around a contradiction to allow algorithm progression
     pub fn resolve_deadlock(&mut self, contradiction_pos: [usize; 2], iteration: usize) {
         let result = crate::algorithm::deadlock::resolve_spatial_deadlock(
-            &mut self.grid_state,
-            &mut self.feasibility_layer,
+            crate::algorithm::deadlock::DeadlockState {
+                grid_state: &mut self.grid_state,
+                feasibility_layer: &mut self.feasibility_layer,
+                selection_tally: &mut self.selection_tally,
+                visualization: &mut self.visualization,
+            },
             contradiction_pos,
             self.system_offset,
-            &mut self.selection_tally,
             &self.step_data,
             &self.probability_influence_matrices,
-            &mut self.visualization,
             iteration,
         );
 
@@ -872,8 +832,8 @@ impl GreedyStochastic {
         if let Some(prefill) = &mut self.prefill_data {
             for &[row, col] in &result.unlocked_positions {
                 let world_pos = [
-                    row as i32 - self.system_offset[0],
-                    col as i32 - self.system_offset[1],
+                    usize_to_i32(row) - self.system_offset[0],
+                    usize_to_i32(col) - self.system_offset[1],
                 ];
 
                 if let Some(tile_ref) = prefill.is_protected(world_pos) {
@@ -885,4 +845,13 @@ impl GreedyStochastic {
             }
         }
     }
+}
+
+/// Grid index of a world position; a position above or left of the grid
+/// maps past its end, so bounds checks treat it as outside
+fn grid_index(world_position: [i32; 2], system_offset: [i32; 2]) -> [usize; 2] {
+    [
+        usize::try_from(world_position[0] + system_offset[0]).unwrap_or(usize::MAX),
+        usize::try_from(world_position[1] + system_offset[1]).unwrap_or(usize::MAX),
+    ]
 }

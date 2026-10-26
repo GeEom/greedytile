@@ -1,6 +1,6 @@
 [package]
 name = "greedytile"
-version = "0.1.9"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 authors = ["David Gathercole"]
@@ -48,60 +48,57 @@ lto = "fat"
 debug = false
 
 [lints.rust]
-future_incompatible = "deny"
-nonstandard_style = "deny"
-rust_2018_idioms = "deny"
-missing_docs = "deny"
-unsafe_code = "deny"
-unused = "deny"
+# groups — priority -1, or clippy's lint_groups_priority fails an allow below
+rust_2024_compatibility = { level = "deny", priority = -1 }
+future_incompatible     = { level = "deny", priority = -1 }
+nonstandard_style       = { level = "deny", priority = -1 }
+rust_2018_idioms        = { level = "deny", priority = -1 }
+unused                  = { level = "deny", priority = -1 }
+missing_docs            = "deny"
+unsafe_code             = "deny"
 
 [lints.clippy]
-# Lint groups
+# groups — priority -1 so specific lines can override
 correctness = { level = "deny", priority = -1 }
-suspicious = { level = "deny", priority = -1 }
-complexity = { level = "deny", priority = -1 }
-pedantic = { level = "deny", priority = -1 }
-nursery = { level = "deny", priority = -1 }
-cargo = { level = "deny", priority = -1 }
-style = { level = "deny", priority = -1 }
-perf = { level = "deny", priority = -1 }
-
-# Deny
-used_underscore_binding = "deny"
-if_then_some_else_none = "deny"
-missing_const_for_fn = "deny"
-missing_errors_doc = "deny"
-missing_panics_doc = "deny"
-indexing_slicing = "deny"
-result_large_err = "deny"
-shadow_unrelated = "deny"
-wildcard_imports = "deny"
-map_err_ignore = "deny"
-enum_glob_use = "deny"
-infinite_loop = "deny"
-unimplemented = "deny"
-print_stderr = "deny"
-print_stdout = "deny"
-expect_used = "deny"
-unwrap_used = "deny"
-empty_loop = "deny"
-mem_forget = "deny"
-dbg_macro = "deny"
-panic = "deny"
-todo = "deny"
-exit = "deny"
-
-# Allow
-cast_possible_truncation = "allow"
+suspicious  = { level = "deny", priority = -1 }
+complexity  = { level = "deny", priority = -1 }
+style       = { level = "deny", priority = -1 }
+perf        = { level = "deny", priority = -1 }
+pedantic    = { level = "deny", priority = -1 }
+nursery     = { level = "deny", priority = -1 }
+cargo       = { level = "deny", priority = -1 }
+# individual denies
+allow_attributes                = "deny"
+allow_attributes_without_reason = "deny"
+used_underscore_binding         = "deny"
+if_then_some_else_none          = "deny"
+missing_const_for_fn            = "deny"
+missing_errors_doc              = "deny"
+missing_panics_doc              = "deny"
+indexing_slicing                = "deny"
+result_large_err                = "deny"
+shadow_unrelated                = "deny"
+wildcard_imports                = "deny"
+map_err_ignore                  = "deny"
+enum_glob_use                   = "deny"
+infinite_loop                   = "deny"
+unimplemented                   = "deny"
+expect_used                     = "deny"
+unwrap_used                     = "deny"
+empty_loop                      = "deny"
+mem_forget                      = "deny"
+dbg_macro                       = "deny"
+panic                           = "deny"
+todo                            = "deny"
+exit                            = "deny"
+unreachable                     = "deny"
+let_underscore_must_use         = "deny"
+let_underscore_untyped          = "deny"
+print_stdout                    = "deny"
+print_stderr                    = "deny"
+unused_result_ok                = "deny"
+# the only permitted allows
 module_name_repetitions = "allow"
+similar_names           = "allow"
+redundant_pub_crate     = "allow"
 multiple_crate_versions = "allow"
-many_single_char_names = "allow"
-cast_precision_loss = "allow"
-needless_range_loop = "allow"
-cast_possible_wrap = "allow"
-too_many_arguments = "allow"
-must_use_candidate = "allow"
-type_complexity = "allow"
-cast_sign_loss = "allow"
-too_many_lines = "allow"
-cast_lossless = "allow"

@@ -1,9 +1,6 @@
 //! Performance measurement for tile viability computation at varying grid densities
 
-// Criterion macros generate undocumented functions
-#![allow(missing_docs)]
-
-use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion};
 use greedytile::algorithm::cache::ViableTilesCache;
 use greedytile::algorithm::executor::GreedyStochastic;
 use greedytile::algorithm::selection::compute_viable_tiles_at_position;
@@ -81,9 +78,9 @@ fn bench_compute_viable_tiles_single_position(c: &mut Criterion) {
     });
 }
 
-criterion_group!(
-    benches,
-    bench_compute_viable_tiles,
-    bench_compute_viable_tiles_single_position
-);
-criterion_main!(benches);
+fn main() {
+    let mut criterion = Criterion::default().configure_from_args();
+    bench_compute_viable_tiles(&mut criterion);
+    bench_compute_viable_tiles_single_position(&mut criterion);
+    criterion.final_summary();
+}

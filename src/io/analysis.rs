@@ -2,9 +2,10 @@
 
 use crate::io::error::Result;
 use crate::io::visualization::VisualizationCapture;
+use crate::math::convert::{f64_to_u8_saturating, usize_to_i32, usize_to_u32};
 use crate::spatial::GridState;
 use crate::spatial::grid;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 struct RgbaFrame {
     width: u32,
@@ -29,11 +30,8 @@ pub struct AnalysisEvent {
     pub weighted_color: [u8; 4],
 }
 
-/// Captures and visualizes algorithm metrics in a 2x2 grid layout:
-/// - Top-left: Weighted color probabilities
-/// - Top-right: Actual tile placements
-/// - Bottom-left: Entropy (information content)
-/// - Bottom-right: Feasibility (placement viability)
+/// Records metrics to render in a 2x2 grid: probability-weighted colour and
+/// placed tiles on top, entropy and feasibility below
 pub struct AnalysisCapture {
     events: Vec<AnalysisEvent>,
     color_mapping: Vec<[u8; 4]>,
@@ -42,6 +40,7 @@ pub struct AnalysisCapture {
 
 impl AnalysisCapture {
     /// Create a new analysis capture with color mapping and grid parameters
+    #[must_use]
     pub fn new(color_mapping: Vec<[u8; 4]>, grid_extension_radius: i32) -> Self {
         Self {
             events: Vec::with_capacity(10000),
@@ -64,20 +63,24 @@ impl AnalysisCapture {
                 && tile_idx > 0
                 && let Some(color) = self.color_mapping.get(tile_idx - 1)
             {
-                weighted_r += color[0] as f64 * prob;
-                weighted_g += color[1] as f64 * prob;
-                weighted_b += color[2] as f64 * prob;
-                weighted_a += color[3] as f64 * prob;
+                let red = f64::from(color[0]) * prob;
+                let green = f64::from(color[1]) * prob;
+                let blue = f64::from(color[2]) * prob;
+                let alpha = f64::from(color[3]) * prob;
+                weighted_r += red;
+                weighted_g += green;
+                weighted_b += blue;
+                weighted_a += alpha;
                 total_weight += prob;
             }
         }
 
         if total_weight > 0.0 {
             [
-                (weighted_r / total_weight).round() as u8,
-                (weighted_g / total_weight).round() as u8,
-                (weighted_b / total_weight).round() as u8,
-                (weighted_a / total_weight).round() as u8,
+                f64_to_u8_saturating((weighted_r / total_weight).round()),
+                f64_to_u8_saturating((weighted_g / total_weight).round()),
+                f64_to_u8_saturating((weighted_b / total_weight).round()),
+                f64_to_u8_saturating((weighted_a / total_weight).round()),
             ]
         } else {
             [0, 0, 0, 255]
@@ -85,13 +88,12 @@ impl AnalysisCapture {
     }
 
     /// Get the number of events captured
+    #[must_use]
     pub const fn event_count(&self) -> usize {
         self.events.len()
     }
 
-    /// Records analysis data for a region around a placement
-    ///
-    /// Captures entropy, feasibility, and probability data within the capture radius
+    /// Record each cell's metrics within the capture radius of a placement
     pub fn record_region(
         &mut self,
         center_row: i32,
@@ -100,11 +102,8 @@ impl AnalysisCapture {
         system_offset: [i32; 2],
         iteration: usize,
     ) {
-        let (row_span, col_span) = grid::get_region_spans(
-            &system_offset,
-            &[center_row, center_col],
-            self.capture_radius,
-        );
+        let (row_span, col_span) =
+            grid::get_region_spans(system_offset, [center_row, center_col], self.capture_radius);
 
         let row_start = row_span.start.min(grid_state.rows());
         let row_end = row_span.end.min(grid_state.rows());
@@ -126,8 +125,8 @@ impl AnalysisCapture {
                 }
                 let weighted_color = self.calculate_weighted_color(&probs);
 
-                let abs_row = row as i32 - system_offset[0];
-                let abs_col = col as i32 - system_offset[1];
+                let abs_row = usize_to_i32(row) - system_offset[0];
+                let abs_col = usize_to_i32(col) - system_offset[1];
 
                 self.events.push(AnalysisEvent {
                     row: abs_row,
@@ -141,10 +140,7 @@ impl AnalysisCapture {
         }
     }
 
-    /// Calculate unified bounds across all events and visualization placements
-    ///
-    /// Determines the minimal bounding box that contains all analysis events
-    /// and tile placements to ensure consistent frame dimensions
+    /// The box holding every event and placement, so all frames share one size
     fn calculate_unified_bounds(
         &self,
         visualization: &VisualizationCapture,
@@ -169,8 +165,8 @@ impl AnalysisCapture {
             max_col = max_col.max(placement.col);
         }
 
-        let total_rows = (max_row - min_row + 1) as usize;
-        let total_cols = (max_col - min_col + 1) as usize;
+        let total_rows = usize::try_from(max_row - min_row + 1).unwrap_or(0);
+        let total_cols = usize::try_from(max_col - min_col + 1).unwrap_or(0);
 
         (min_row, min_col, total_rows, total_cols)
     }
@@ -185,8 +181,7 @@ impl AnalysisCapture {
 
         for event in &self.events {
             if event.iteration <= up_to_iteration {
-                let row_idx = (event.row - min_row) as usize;
-                let col_idx = (event.col - min_col) as usize;
+                let (row_idx, col_idx) = event_cell(event, min_row, min_col);
                 if let Some(row) = grid.get_mut(row_idx)
                     && let Some(cell) = row.get_mut(col_idx)
                 {
@@ -208,8 +203,7 @@ impl AnalysisCapture {
 
         for event in &self.events {
             if event.iteration <= up_to_iteration {
-                let row_idx = (event.row - min_row) as usize;
-                let col_idx = (event.col - min_col) as usize;
+                let (row_idx, col_idx) = event_cell(event, min_row, min_col);
                 if let Some(row) = grid.get_mut(row_idx)
                     && let Some(cell) = row.get_mut(col_idx)
                 {
@@ -224,8 +218,8 @@ impl AnalysisCapture {
     fn reconstruct_grid_at_iteration(
         visualization: &VisualizationCapture,
         iteration: usize,
-    ) -> HashMap<(i32, i32), usize> {
-        let mut grid = HashMap::new();
+    ) -> BTreeMap<(i32, i32), usize> {
+        let mut grid = BTreeMap::new();
         for placement in visualization.get_placements() {
             if placement.iteration <= iteration {
                 if let Some(tile_ref) = placement.tile_ref {
@@ -248,8 +242,7 @@ impl AnalysisCapture {
 
         for event in &self.events {
             if event.iteration <= up_to_iteration {
-                let row_idx = (event.row - min_row) as usize;
-                let col_idx = (event.col - min_col) as usize;
+                let (row_idx, col_idx) = event_cell(event, min_row, min_col);
                 if let Some(row) = grid.get_mut(row_idx)
                     && let Some(cell) = row.get_mut(col_idx)
                 {
@@ -277,8 +270,6 @@ impl AnalysisCapture {
 
         let tile_grid = Self::reconstruct_grid_at_iteration(visualization, iteration);
 
-        // max_entropy ensures consistent normalization across all frames
-
         let padding = 2;
         let total_width = grid_cols * 2 + padding;
         let total_height = grid_rows * 2 + padding;
@@ -300,8 +291,8 @@ impl AnalysisCapture {
         for row in 0..grid_rows {
             for col in 0..grid_cols {
                 let pixel_idx = (row * total_width + col + grid_cols + padding) * 4;
-                let abs_row = row as i32 + min_row;
-                let abs_col = col as i32 + min_col;
+                let abs_row = usize_to_i32(row) + min_row;
+                let abs_col = usize_to_i32(col) + min_col;
 
                 if let Some(&tile_idx) = tile_grid.get(&(abs_row, abs_col)) {
                     if tile_idx > 1
@@ -323,7 +314,7 @@ impl AnalysisCapture {
                     && let Some(&entropy) = grid_row.get(col)
                 {
                     let normalized = if max_entropy > 0.0 {
-                        (entropy / max_entropy * 255.0) as u8
+                        f64_to_u8_saturating(entropy / max_entropy * 255.0)
                     } else {
                         0
                     };
@@ -341,7 +332,7 @@ impl AnalysisCapture {
                 if let Some(grid_row) = feasibility_grid.get(row)
                     && let Some(&feasibility) = grid_row.get(col)
                 {
-                    let normalized = (feasibility * 255.0) as u8;
+                    let normalized = f64_to_u8_saturating(feasibility * 255.0);
                     if let Some(pixel_slice) = pixels.get_mut(pixel_idx..pixel_idx + 4) {
                         pixel_slice.copy_from_slice(&[normalized, normalized, normalized, 255]);
                     }
@@ -373,20 +364,15 @@ impl AnalysisCapture {
         }
 
         RgbaFrame {
-            width: total_width as u32,
-            height: total_height as u32,
+            width: usize_to_u32(total_width),
+            height: usize_to_u32(total_height),
             pixels,
         }
     }
 
-    /// Export analysis as animated GIF with 2x2 layout
-    ///
-    /// Creates an animated visualization showing the algorithm's decision-making
-    /// process through entropy, feasibility, and probability metrics
-    ///
+    /// Write the metrics as a GIF with one 2x2 frame per iteration
     /// # Errors
-    ///
-    /// Returns an error if image creation or file operations fail
+    /// Fails when a frame cannot be built or the file cannot be written.
     pub fn export_analysis(
         &self,
         visualization: &VisualizationCapture,
@@ -479,4 +465,13 @@ impl AnalysisCapture {
 
         Ok(())
     }
+}
+
+/// Locates an event in a grid whose first cell sits at (`min_row`, `min_col`);
+/// one above or left of that cell maps past the grid, so lookups miss
+fn event_cell(event: &AnalysisEvent, min_row: i32, min_col: i32) -> (usize, usize) {
+    (
+        usize::try_from(event.row - min_row).unwrap_or(usize::MAX),
+        usize::try_from(event.col - min_col).unwrap_or(usize::MAX),
+    )
 }

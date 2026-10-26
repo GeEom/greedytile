@@ -41,7 +41,7 @@ mod tests {
     #[test]
     fn test_prefill_data_is_protected() {
         let placement_queue = std::collections::VecDeque::new();
-        let mut protected_positions = std::collections::HashMap::new();
+        let mut protected_positions = std::collections::BTreeMap::new();
 
         protected_positions.insert([5, 10], 2);
         protected_positions.insert([-3, 7], 4);
@@ -65,7 +65,7 @@ mod tests {
     // Tests next_placement and queue_replacement
     // Verified by changing queue_replacement to push_back
     #[test]
-    fn test_prefill_data_queue_operations() {
+    fn test_prefill_data_queue_operations() -> crate::TestResult {
         let mut placement_queue = std::collections::VecDeque::new();
         let placement1 = PrefillPlacement {
             world_position: [1, 2],
@@ -86,13 +86,13 @@ mod tests {
 
         let mut prefill_data = PrefillData {
             placement_queue,
-            protected_positions: std::collections::HashMap::new(),
+            protected_positions: std::collections::BTreeMap::new(),
             bounds,
         };
 
         let next = prefill_data.next_placement();
         assert!(next.is_some());
-        let next = next.unwrap();
+        let next = next.ok_or("queue is empty")?;
         assert_eq!(next.world_position, [1, 2]);
         assert_eq!(next.tile_reference, 3);
 
@@ -104,8 +104,9 @@ mod tests {
 
         let replacement_next = prefill_data.next_placement();
         assert!(replacement_next.is_some());
-        let replacement_next = replacement_next.unwrap();
+        let replacement_next = replacement_next.ok_or("queue is empty")?;
         assert_eq!(replacement_next.world_position, [7, 8]);
         assert_eq!(replacement_next.tile_reference, 9);
+        Ok(())
     }
 }

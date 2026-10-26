@@ -1,6 +1,7 @@
 //! Tests for analysis capture with configurable recording radius
 
 use greedytile::io::analysis::AnalysisCapture;
+use greedytile::math::convert::usize_to_f64;
 use greedytile::spatial::GridState;
 
 // Verifies AnalysisCapture construction and recording functionality with different capture radii
@@ -32,10 +33,10 @@ fn test_analysis_capture_new() {
     for i in 0..5 {
         for j in 0..5 {
             if let Some(entropy) = large_grid.entropy.get_mut([i, j]) {
-                *entropy = (i + j) as f64 * 0.1;
+                *entropy = usize_to_f64(i + j) * 0.1;
             }
             if let Some(feasibility) = large_grid.feasibility.get_mut([i, j]) {
-                *feasibility = (i * j) as f64 * 0.1;
+                *feasibility = usize_to_f64(i * j) * 0.1;
             }
         }
     }
@@ -80,10 +81,10 @@ fn test_analysis_capture_radius_initialization() {
     for row in 0..10 {
         for col in 0..10 {
             if let Some(entropy) = grid_state.entropy.get_mut([row, col]) {
-                *entropy = (row as f64).mul_add(0.1, 0.5);
+                *entropy = usize_to_f64(row).mul_add(0.1, 0.5);
             }
             if let Some(feasibility) = grid_state.feasibility.get_mut([row, col]) {
-                *feasibility = (col as f64).mul_add(-0.05, 0.8);
+                *feasibility = usize_to_f64(col).mul_add(-0.05, 0.8);
             }
         }
     }

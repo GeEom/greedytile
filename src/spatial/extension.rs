@@ -1,9 +1,6 @@
-//! Dynamic grid extension utilities for adaptive spatial data structures
-//!
-//! Provides efficient extension of n-dimensional arrays when tile placement
-//! exceeds current bounds. The extension system calculates minimal padding
-//! requirements and preserves existing data while avoiding repeated allocations.
+//! Grows 2D and 3D arrays by the least padding that reaches a new position
 
+use crate::math::convert::usize_to_i32;
 use ndarray::{Array2, Array3};
 use num_traits::{NumAssign, One};
 
@@ -13,10 +10,7 @@ pub trait Extendable {
     fn padding_value() -> Self;
 }
 
-/// Extension information calculated from current bounds and target position
-///
-/// Stores padding requirements for each direction and the updated coordinate
-/// system offset. Minimizes memory allocation by calculating exact requirements.
+/// Padding on each side, and the offset that keeps world coordinates fixed
 #[derive(Debug, Clone, Copy)]
 pub struct ExtensionInfo {
     /// Padding needed on the left side
@@ -33,18 +27,15 @@ pub struct ExtensionInfo {
     pub needs_extension: bool,
 }
 
-/// Calculate extension information for a grid
-///
-/// Returns a struct containing padding requirements and new offset values
-/// when extending a grid to accommodate a new position plus radius.
-/// Preserves the coordinate system by adjusting the offset appropriately.
+/// The padding a grid needs to hold `coordinates` plus `radius` on every side
+#[must_use]
 pub fn calculate_extension(
     current_dims: [usize; 2],
     offset: [i32; 2],
-    coordinates: &[i32; 2],
+    coordinates: [i32; 2],
     radius: i32,
 ) -> ExtensionInfo {
-    let current_dims_i32 = [current_dims[0] as i32, current_dims[1] as i32];
+    let current_dims_i32 = [usize_to_i32(current_dims[0]), usize_to_i32(current_dims[1])];
     let current_min = [-offset[0], -offset[1]];
     let current_max = [
         -offset[0] + current_dims_i32[0] - 1,
@@ -60,15 +51,19 @@ pub fn calculate_extension(
         current_max[1].max(coordinates[1] + radius),
     ];
 
-    let pad_left = (current_min[0] - new_min[0]) as usize;
-    let pad_right = (new_max[0] - current_max[0]) as usize;
-    let pad_top = (current_min[1] - new_min[1]) as usize;
-    let pad_bottom = (new_max[1] - current_max[1]) as usize;
+    // The min and max above make every difference non-negative
+    let pad_left = usize::try_from(current_min[0] - new_min[0]).unwrap_or(0);
+    let pad_right = usize::try_from(new_max[0] - current_max[0]).unwrap_or(0);
+    let pad_top = usize::try_from(current_min[1] - new_min[1]).unwrap_or(0);
+    let pad_bottom = usize::try_from(new_max[1] - current_max[1]).unwrap_or(0);
 
     let needs_extension = pad_left + pad_right + pad_top + pad_bottom > 0;
 
     let new_offset = if needs_extension {
-        [offset[0] + pad_left as i32, offset[1] + pad_top as i32]
+        [
+            offset[0] + usize_to_i32(pad_left),
+            offset[1] + usize_to_i32(pad_top),
+        ]
     } else {
         offset
     };
@@ -83,11 +78,7 @@ pub fn calculate_extension(
     }
 }
 
-/// Extend a 2D array with padding
-///
-/// Copies existing data to the appropriate position in the new array
-/// while filling new cells with the specified padding value. Returns
-/// the original array unchanged if no extension is needed.
+/// Copy `array` into a padded one, filling new cells with `padding_value`
 pub fn extend_array_2d<T: Clone>(
     array: &Array2<T>,
     info: &ExtensionInfo,
@@ -105,7 +96,6 @@ pub fn extend_array_2d<T: Clone>(
 
     let mut new_array = Array2::from_elem(new_shape, padding_value);
 
-    // O(mn) copy preserves spatial relationships
     for i in 0..old_rows {
         for j in 0..old_cols {
             if let (Some(src), Some(dst)) = (
@@ -120,10 +110,8 @@ pub fn extend_array_2d<T: Clone>(
     new_array
 }
 
-/// Extend a 3D array with padding
-///
-/// Maintains the layer structure while extending spatial dimensions.
-/// Used for probability matrices where each layer represents a tile type.
+/// Pad the last two axes of `array` with ones, keeping every layer
+#[must_use]
 pub fn extend_array_3d<T>(array: &Array3<T>, info: &ExtensionInfo) -> Array3<T>
 where
     T: NumAssign + One + Clone,
@@ -141,7 +129,6 @@ where
 
     let mut new_array = Array3::<T>::ones(new_shape);
 
-    // O(mn) copy preserves spatial relationships
     for i in 0..n_layers {
         for j in 0..old_rows {
             for k in 0..old_cols {

@@ -1,9 +1,6 @@
 //! Performance measurement for complete pattern generation workflow
 
-// Criterion macros generate undocumented functions
-#![allow(missing_docs)]
-
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::Criterion;
 use greedytile::algorithm::executor::GreedyStochastic;
 use std::hint::black_box;
 
@@ -25,5 +22,8 @@ fn bench_generate_250_steps(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_generate_250_steps);
-criterion_main!(benches);
+fn main() {
+    let mut criterion = Criterion::default().configure_from_args();
+    bench_generate_250_steps(&mut criterion);
+    criterion.final_summary();
+}

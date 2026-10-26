@@ -6,13 +6,13 @@ mod tests {
     use greedytile::algorithm::executor::GreedyStochastic;
     use greedytile::algorithm::propagation::detect_forced_positions;
     use greedytile::algorithm::selection::compute_viable_tiles_at_position;
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
 
     // Verifies forced positions are detected during iterations
     // Verified by breaking the detection condition logic
     #[test]
-    fn test_forced_position_detection_basic() {
-        let mut executor = GreedyStochastic::new(42).expect("Failed to create executor");
+    fn test_forced_position_detection_basic() -> crate::TestResult {
+        let mut executor = GreedyStochastic::new(42)?;
 
         let mut total_forced_detected = 0;
 
@@ -22,7 +22,7 @@ mod tests {
             let prev_coords = executor.selection_coordinates;
             let prev_offset = executor.system_offset;
 
-            executor.run_iteration().expect("Failed to run iteration");
+            executor.run_iteration()?;
 
             let mut cache = ViableTilesCache::new();
             let new_forced = detect_forced_positions(
@@ -44,20 +44,21 @@ mod tests {
             "No forced positions were detected across 10 iterations. \
              Expected at least some positions to become forced due to constraints."
         );
+        Ok(())
     }
 
     // Verifies forced positions have exactly 1 viable tile
     // Verified by allowing positions with multiple viable tiles to be marked as forced
     #[test]
-    fn test_forced_position_detection_correctness() {
-        let mut executor = GreedyStochastic::new(123).expect("Failed to create executor");
+    fn test_forced_position_detection_correctness() -> crate::TestResult {
+        let mut executor = GreedyStochastic::new(123)?;
 
         let mut forced_found = false;
         for _ in 0..20 {
             let prev_coords = executor.selection_coordinates;
             let prev_offset = executor.system_offset;
 
-            executor.run_iteration().expect("Failed to run iteration");
+            executor.run_iteration()?;
 
             let mut cache = ViableTilesCache::new();
             let forced = detect_forced_positions(
@@ -105,21 +106,22 @@ mod tests {
             "No forced positions found in 20 iterations. \
              This might indicate the detection is not working."
         );
+        Ok(())
     }
 
     // Tests forced positions are detected in all 8 adjacent directions
     // Verified by skipping positive row directions which caused the test to fail
     #[test]
-    fn test_forced_position_adjacency_coverage() {
-        let mut executor = GreedyStochastic::new(456).expect("Failed to create executor");
+    fn test_forced_position_adjacency_coverage() -> crate::TestResult {
+        let mut executor = GreedyStochastic::new(456)?;
 
-        let mut forced_directions = HashSet::new();
+        let mut forced_directions = BTreeSet::new();
 
         for _ in 0..30 {
             let prev_coords = executor.selection_coordinates;
             let prev_offset = executor.system_offset;
 
-            executor.run_iteration().expect("Failed to run iteration");
+            executor.run_iteration()?;
 
             let mut cache = ViableTilesCache::new();
             let forced = detect_forced_positions(
@@ -160,13 +162,14 @@ mod tests {
             "No forced positions detected with positive di (row below). \
              This suggests the adjacency loop might be incorrect."
         );
+        Ok(())
     }
 
     // Verifies forced positions are processed from pipeline
     // Verified by preventing forced positions from being added to the pipeline
     #[test]
-    fn test_forced_pipeline_processing() {
-        let mut executor = GreedyStochastic::new(789).expect("Failed to create executor");
+    fn test_forced_pipeline_processing() -> crate::TestResult {
+        let mut executor = GreedyStochastic::new(789)?;
 
         let mut forced_processed_count = 0;
         let mut random_selection_count = 0;
@@ -175,7 +178,7 @@ mod tests {
             let has_forced = !executor.forced_pipeline.is_empty();
             let forced_count_before = executor.forced_pipeline.len();
 
-            executor.run_iteration().expect("Failed to run iteration");
+            executor.run_iteration()?;
 
             let forced_count_after = executor.forced_pipeline.len();
 
@@ -195,16 +198,17 @@ mod tests {
             random_selection_count > 0,
             "No random selections were made. This is suspicious."
         );
+        Ok(())
     }
 
     // Tests no duplicate positions in pipeline
     // Verified by removing duplicate check which caused duplicates to appear
     #[test]
-    fn test_forced_position_deduplication() {
-        let mut executor = GreedyStochastic::new(321).expect("Failed to create executor");
+    fn test_forced_position_deduplication() -> crate::TestResult {
+        let mut executor = GreedyStochastic::new(321)?;
 
         for _ in 0..15 {
-            executor.run_iteration().expect("Failed to run iteration");
+            executor.run_iteration()?;
 
             if !executor.forced_pipeline.is_empty() {
                 let positions: Vec<[i32; 2]> = executor
@@ -214,7 +218,7 @@ mod tests {
                     .map(|fp| fp.coordinates)
                     .collect();
 
-                let unique_positions: HashSet<[i32; 2]> = positions.iter().copied().collect();
+                let unique_positions: BTreeSet<[i32; 2]> = positions.iter().copied().collect();
 
                 assert_eq!(
                     positions.len(),
@@ -223,13 +227,14 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     // Validates forced position processing helps prevent contradictions
     // Verified by confirming system runs without errors when forced positions are detected
     #[test]
-    fn test_forced_position_prevents_contradiction() {
-        let mut executor = GreedyStochastic::new(654).expect("Failed to create executor");
+    fn test_forced_position_prevents_contradiction() -> crate::TestResult {
+        let mut executor = GreedyStochastic::new(654)?;
 
         let mut had_forced_positions = false;
 
@@ -238,17 +243,15 @@ mod tests {
                 had_forced_positions = true;
             }
 
-            match executor.run_iteration() {
-                Ok(_) => {}
-                Err(e) => {
-                    unreachable!("Unexpected error at iteration {i}: {e}")
-                }
-            }
+            executor
+                .run_iteration()
+                .map_err(|e| format!("iteration {i}: {e}"))?;
         }
 
         assert!(
             had_forced_positions,
             "No forced positions were detected during the test"
         );
+        Ok(())
     }
 }

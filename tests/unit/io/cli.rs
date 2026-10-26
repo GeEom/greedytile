@@ -105,92 +105,100 @@ mod tests {
     // Tests error handling for non-PNG files
     // Verified by removing file type validation
     #[test]
-    fn test_process_invalid_file_type() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_process_invalid_file_type() -> crate::TestResult {
+        let temp_dir = TempDir::new()?;
         let txt_file = temp_dir.path().join("test.txt");
-        fs::write(&txt_file, "not a png").unwrap();
+        fs::write(&txt_file, "not a png")?;
 
-        let cli = create_test_cli(txt_file.to_str().unwrap());
+        let cli = create_test_cli(txt_file.to_str().ok_or("path is not UTF-8")?);
         let mut processor = FileProcessor::new(cli);
 
         let result = processor.process();
         assert!(result.is_err());
+        Ok(())
     }
 
     // Tests skip logic when output file exists
     // Verified by removing skip check
     #[test]
-    fn test_skip_existing_file() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_skip_existing_file() -> crate::TestResult {
+        let temp_dir = TempDir::new()?;
         let input_file = temp_dir.path().join("test.png");
         let output_file = temp_dir.path().join("test_result.png");
 
-        fs::write(&input_file, "fake png").unwrap();
-        fs::write(&output_file, "fake png").unwrap();
+        fs::write(&input_file, "fake png")?;
+        fs::write(&output_file, "fake png")?;
 
-        let cli = create_test_cli(input_file.to_str().unwrap());
+        let cli = create_test_cli(input_file.to_str().ok_or("path is not UTF-8")?);
         let mut processor = FileProcessor::new(cli);
 
         let result = processor.process();
         assert!(result.is_ok());
+        Ok(())
     }
 
     // Tests processing empty directories
     // Verified by adding error for empty directories
     #[test]
-    fn test_process_empty_directory() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_process_empty_directory() -> crate::TestResult {
+        let temp_dir = TempDir::new()?;
 
-        let cli = create_test_cli(temp_dir.path().to_str().unwrap());
+        let cli = create_test_cli(temp_dir.path().to_str().ok_or("path is not UTF-8")?);
         let mut processor = FileProcessor::new(cli);
 
         let result = processor.process();
         assert!(result.is_ok());
+        Ok(())
     }
 
     // Tests output filename generation with suffix
     // Verified by changing output suffix to verify path generation
     #[test]
-    fn test_output_path_generation() {
-        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    fn test_output_path_generation() -> crate::TestResult {
+        let temp_dir = tempfile::tempdir()?;
         let input_file = temp_dir.path().join("test_image.png");
 
-        fs::write(&input_file, "fake png").unwrap();
+        fs::write(&input_file, "fake png")?;
 
         let output_file = temp_dir.path().join("test_image_result.png");
-        fs::write(&output_file, "output").unwrap();
+        fs::write(&output_file, "output")?;
 
-        let cli = create_test_cli(input_file.to_str().unwrap());
+        let cli = create_test_cli(input_file.to_str().ok_or("path is not UTF-8")?);
         let mut processor = FileProcessor::new(cli);
 
         let result = processor.process();
         assert!(result.is_ok());
 
         let input_file2 = temp_dir.path().join("test_image2.png");
-        fs::write(&input_file2, "fake png").unwrap();
+        fs::write(&input_file2, "fake png")?;
 
-        let cli2 = create_test_cli(input_file2.to_str().unwrap());
+        let cli2 = create_test_cli(input_file2.to_str().ok_or("path is not UTF-8")?);
         let mut processor2 = FileProcessor::new(cli2);
 
-        let _ = processor2.process();
+        assert!(processor2.process().is_err(), "fake PNG data cannot decode");
 
         let wrong_output = temp_dir.path().join("test_image2_output.png");
         assert!(
             !wrong_output.exists(),
             "Should not create file with wrong suffix"
         );
+        Ok(())
     }
 
     // Tests quiet mode configuration and behavior
     // Verified by testing quiet flag affects progress display
     #[test]
-    fn test_quiet_mode() {
-        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    fn test_quiet_mode() -> crate::TestResult {
+        let temp_dir = tempfile::tempdir()?;
         let input_file = temp_dir.path().join("test.png");
 
-        fs::write(&input_file, "fake png").unwrap();
+        fs::write(&input_file, "fake png")?;
 
-        let args_quiet = vec!["program", input_file.to_str().unwrap(), "--quiet"];
+        let args_quiet = vec![
+            "program",
+            input_file.to_str().ok_or("path is not UTF-8")?,
+            "--quiet",
+        ];
         let cli_quiet = Cli::parse_from(args_quiet);
         assert!(cli_quiet.quiet, "Quiet flag should be set");
         assert!(
@@ -199,9 +207,9 @@ mod tests {
         );
 
         let mut processor_quiet = FileProcessor::new(cli_quiet);
-        let _ = processor_quiet.process();
+        assert!(processor_quiet.process().is_err());
 
-        let args_normal = vec!["program", input_file.to_str().unwrap()];
+        let args_normal = vec!["program", input_file.to_str().ok_or("path is not UTF-8")?];
         let cli_normal = Cli::parse_from(args_normal);
         assert!(!cli_normal.quiet, "Quiet flag should not be set by default");
         assert!(
@@ -210,7 +218,8 @@ mod tests {
         );
 
         let mut processor_normal = FileProcessor::new(cli_normal);
-        let _ = processor_normal.process();
+        assert!(processor_normal.process().is_err());
+        Ok(())
     }
 
     fn create_test_cli(target: &str) -> Cli {
@@ -253,19 +262,19 @@ mod tests {
         ];
         let cli = Cli::parse_from(args);
 
-        assert!(cli.visualize);
-        assert!(cli.analysis);
-        assert!(cli.prefill);
-        assert!(cli.rotate);
-        assert!(cli.mirror);
+        assert!(cli.outputs.visualize);
+        assert!(cli.outputs.analysis);
+        assert!(cli.tiles.prefill);
+        assert!(cli.tiles.rotate);
+        assert!(cli.tiles.mirror);
 
         let args_short = vec!["program", "test.png", "-v", "-a", "-p", "-r", "-m"];
         let cli_short = Cli::parse_from(args_short);
 
-        assert!(cli_short.visualize);
-        assert!(cli_short.analysis);
-        assert!(cli_short.prefill);
-        assert!(cli_short.rotate);
-        assert!(cli_short.mirror);
+        assert!(cli_short.outputs.visualize);
+        assert!(cli_short.outputs.analysis);
+        assert!(cli_short.tiles.prefill);
+        assert!(cli_short.tiles.rotate);
+        assert!(cli_short.tiles.mirror);
     }
 }

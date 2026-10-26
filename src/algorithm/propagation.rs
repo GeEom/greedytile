@@ -1,3 +1,4 @@
+use crate::math::convert::{usize_to_f64, usize_to_i32, usize_to_u32};
 use crate::{
     algorithm::cache::ViableTilesCache,
     algorithm::feasibility::FeasibilityCountLayer,
@@ -8,7 +9,7 @@ use crate::{
     spatial::{GridState, grid},
 };
 use ndarray::{Array4, ArrayView3};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
 
 /// Algorithm parameters and source data that remain constant across iterations
@@ -28,7 +29,7 @@ pub struct StepData {
     /// All unique tile patterns extracted from source
     pub source_tiles: Vec<Tile>,
     /// Mapping from constraint patterns to compatible tiles
-    pub tile_compatibility_rules: HashMap<Vec<u8>, Vec<usize>>,
+    pub tile_compatibility_rules: BTreeMap<Vec<u8>, Vec<usize>>,
 }
 
 /// A rectangular region defined by row and column ranges
@@ -41,25 +42,25 @@ pub struct Region {
 
 impl Region {
     /// Create a new region from row and column ranges
+    #[must_use]
     pub const fn new(rows: Range<usize>, cols: Range<usize>) -> Self {
         Self { rows, cols }
     }
 
     /// Get a clone of the row range
+    #[must_use]
     pub fn rows(&self) -> Range<usize> {
         self.rows.clone()
     }
 
     /// Get a clone of the column range
+    #[must_use]
     pub fn cols(&self) -> Range<usize> {
         self.cols.clone()
     }
 }
 
-/// Apply probability influence matrix and recalculate entropy after placing a tile
-///
-/// Updates the region around the selected position based on the tile's
-/// influence patterns from the precomputed probability influence matrices
+/// Apply a placed tile's influence to nearby probabilities and recompute entropy
 pub fn update_probabilities_and_entropy(
     grid_state: &mut GridState,
     probability_influence_matrices: &Array4<f64>,
@@ -69,8 +70,8 @@ pub fn update_probabilities_and_entropy(
     step_data: &StepData,
 ) {
     let (row_span, col_span) = grid::get_region_spans(
-        &system_offset,
-        &selection_coordinates,
+        system_offset,
+        selection_coordinates,
         step_data.grid_extension_radius,
     );
 
@@ -83,14 +84,10 @@ pub fn update_probabilities_and_entropy(
     let impact =
         probability_influence_matrices.index_axis(ndarray::Axis(0), selected_cell_reference - 1);
 
-    // Fused update reduces memory traversals from 2N to N
     update_probabilities_and_entropy_fused(grid_state, &impact, &region);
 }
 
-/// Update probabilities and entropy in a single pass over the affected region
-///
-/// Applies the influence matrix to tile probabilities and immediately
-/// recalculates entropy using mean normalization to avoid separate traversals
+/// Scale probabilities by `impact` and recompute entropy, in one pass over `region`
 pub fn update_probabilities_and_entropy_fused(
     grid_state: &mut GridState,
     impact: &ArrayView3<'_, f64>,
@@ -118,7 +115,7 @@ pub fn update_probabilities_and_entropy_fused(
             }
 
             // Mean normalization prevents numerical instability in entropy calculation
-            let mean_prob = sum / grid_state.unique_cell_count as f64;
+            let mean_prob = sum / usize_to_f64(grid_state.unique_cell_count);
             let entropy = if mean_prob > 0.0 {
                 let mut entropy_sum = 0.0;
                 for color in 0..grid_state.unique_cell_count {
@@ -130,7 +127,8 @@ pub fn update_probabilities_and_entropy_fused(
                         .unwrap_or(0.0)
                         / mean_prob;
                     if p > 0.0 {
-                        entropy_sum += p * p.ln();
+                        let term = p * p.ln();
+                        entropy_sum += term;
                     }
                 }
                 entropy_sum
@@ -144,10 +142,7 @@ pub fn update_probabilities_and_entropy_fused(
     }
 }
 
-/// Mark the selected tile position as locked and update adjacency weights
-///
-/// Adjacency weights decrease with distance to guide future tile selection
-/// toward positions near already-placed tiles
+/// Lock the placed tile and raise nearby adjacency weights, more for nearer cells
 pub fn update_grid_state(
     grid_state: &mut GridState,
     selected_cell_reference: usize,
@@ -157,9 +152,9 @@ pub fn update_grid_state(
     iteration: usize,
 ) {
     for level in 1..=ADJACENCY_LEVELS {
-        let weight_increment = (1 + ADJACENCY_LEVELS - level) as u32;
+        let weight_increment = usize_to_u32(1 + ADJACENCY_LEVELS - level);
         let (row_span, col_span) =
-            grid::get_region_spans(&system_offset, &selection_coordinates, level as i32);
+            grid::get_region_spans(system_offset, selection_coordinates, usize_to_i32(level));
         for row in row_span {
             for col in col_span.clone() {
                 if let Some(weight) = grid_state.adjacency_weights.get_mut([row, col]) {
@@ -169,16 +164,15 @@ pub fn update_grid_state(
         }
     }
 
-    let (row_span_0, col_span_0) =
-        grid::get_region_spans(&system_offset, &selection_coordinates, 0);
+    let (row_span_0, col_span_0) = grid::get_region_spans(system_offset, selection_coordinates, 0);
     for row in row_span_0 {
         for col in col_span_0.clone() {
             if let Some(locked) = grid_state.locked_tiles.get_mut([row, col]) {
-                *locked += selected_cell_reference as u32;
+                *locked += usize_to_u32(selected_cell_reference);
 
                 if let Some(viz) = visualization {
-                    let abs_row = row as i32 - system_offset[0];
-                    let abs_col = col as i32 - system_offset[1];
+                    let abs_row = usize_to_i32(row) - system_offset[0];
+                    let abs_col = usize_to_i32(col) - system_offset[1];
                     viz.record_placement(abs_row, abs_col, *locked, iteration);
                 }
             }
@@ -195,10 +189,7 @@ pub struct ForcedPosition {
     pub tile_reference: usize,
 }
 
-/// Find adjacent positions that are forced to a single tile choice
-///
-/// These positions can be filled immediately without selection logic,
-/// potentially triggering cascades of forced placements
+/// The empty neighbours of `position` that only one tile fits
 pub fn detect_forced_positions(
     grid_state: &GridState,
     position: [i32; 2],
@@ -224,8 +215,12 @@ pub fn detect_forced_positions(
                 continue;
             }
 
-            let row = (check_pos[0] + system_offset[0]) as usize;
-            let col = (check_pos[1] + system_offset[1]) as usize;
+            let (Ok(row), Ok(col)) = (
+                usize::try_from(check_pos[0] + system_offset[0]),
+                usize::try_from(check_pos[1] + system_offset[1]),
+            ) else {
+                continue;
+            };
             if row >= grid_state.rows() || col >= grid_state.cols() {
                 continue;
             }
@@ -277,6 +272,7 @@ impl Default for ForcedPipeline {
 
 impl ForcedPipeline {
     /// Create a new empty pipeline
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             queue: VecDeque::new(),
@@ -298,20 +294,19 @@ impl ForcedPipeline {
     }
 
     /// Check if the pipeline is empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
     }
 
     /// Get the number of pending forced positions
+    #[must_use]
     pub fn len(&self) -> usize {
         self.queue.len()
     }
 }
 
-/// Detect positions that have adjacent tiles but no compatible options
-///
-/// Returns the first contradiction found, which indicates the algorithm
-/// has reached an unsolvable state requiring backtracking or restart
+/// The first empty cell beside placed tiles that no tile fits, if any
 pub fn check_for_contradiction(
     grid_state: &GridState,
     system_offset: [i32; 2],
@@ -331,7 +326,10 @@ pub fn check_for_contradiction(
                 .unwrap_or(0)
                 > 1
             {
-                let coords = [i as i32 - system_offset[0], j as i32 - system_offset[1]];
+                let coords = [
+                    usize_to_i32(i) - system_offset[0],
+                    usize_to_i32(j) - system_offset[1],
+                ];
                 let viable = compute_viable_tiles_at_position(
                     grid_state,
                     coords,
@@ -350,10 +348,8 @@ pub fn check_for_contradiction(
     None
 }
 
-/// Recalculate feasibility scores in the region affected by tile placement
-///
-/// Feasibility represents how many source tiles can match each position,
-/// used to identify highly constrained areas that need priority attention
+/// Recount the tiles that fit each region near a placement, then score each cell
+/// by the mean over the regions around it
 pub fn update_feasibility_counts(
     grid_state: &mut GridState,
     feasibility_layer: &mut FeasibilityCountLayer,
@@ -362,9 +358,9 @@ pub fn update_feasibility_counts(
     step_data: &StepData,
 ) {
     let (row_span, col_span) = grid::get_region_spans(
-        &system_offset,
-        &selection_coordinates,
-        ADJACENCY_LEVELS as i32,
+        system_offset,
+        selection_coordinates,
+        usize_to_i32(ADJACENCY_LEVELS),
     );
 
     for source_row in row_span.clone() {
@@ -387,7 +383,7 @@ pub fn update_feasibility_counts(
                                 && let Some(tile_ref) =
                                     tile_grid.get_mut(di).and_then(|row| row.get_mut(dj))
                             {
-                                *tile_ref = (locked_val - 1) as i32;
+                                *tile_ref = (locked_val - 1).cast_signed();
                             }
                         }
                     }
@@ -405,7 +401,6 @@ pub fn update_feasibility_counts(
         }
     }
 
-    // Average feasibility from all overlapping 3x3 regions
     let target_row_start = (row_span.start + 1).min(grid_state.rows());
     let target_row_end = row_span.end.min(grid_state.rows());
     let target_col_start = (col_span.start + 1).min(grid_state.cols());
@@ -418,10 +413,12 @@ pub fn update_feasibility_counts(
 
             for dr in -1..=1 {
                 for dc in -1..=1 {
-                    let src_row = (target_row as i32 + dr) as usize;
-                    let src_col = (target_col as i32 + dc) as usize;
-
-                    if src_row < grid_state.rows() && src_col < grid_state.cols() {
+                    if let (Some(src_row), Some(src_col)) = (
+                        target_row.checked_add_signed(dr),
+                        target_col.checked_add_signed(dc),
+                    ) && src_row < grid_state.rows()
+                        && src_col < grid_state.cols()
+                    {
                         feasibility_sum += feasibility_layer.get_fraction(src_row, src_col);
                         count += 1;
                     }
@@ -433,7 +430,7 @@ pub fn update_feasibility_counts(
                     .feasibility
                     .get_mut([target_row + 1, target_col + 1])
             {
-                *feas = feasibility_sum / count as f64;
+                *feas = feasibility_sum / f64::from(count);
             }
         }
     }

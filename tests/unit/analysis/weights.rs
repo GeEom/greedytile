@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use crate::analysis::weights::top_k_valid_indices;
+    use greedytile::math::convert::usize_to_f64;
     use ndarray::Array2;
 
     // Tests selection of k highest values from matrix
@@ -45,7 +46,7 @@ mod tests {
             .iter()
             .filter_map(|&[i, j]| matrix.get([i, j]).copied())
             .collect();
-        values.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        values.sort_by(|a, b| b.total_cmp(a));
 
         let expected = vec![15.0, 12.0, 10.0];
         assert_eq!(values, expected);
@@ -76,7 +77,7 @@ mod tests {
             .filter_map(|&[i, j]| matrix.get([i, j]).copied())
             .collect();
 
-        actual_values.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        actual_values.sort_by(|a, b| b.total_cmp(a));
 
         let expected = vec![9.0, 8.0, 7.0];
         assert_eq!(
@@ -102,7 +103,7 @@ mod tests {
             .filter_map(|&[i, j]| mixed_matrix.get([i, j]).copied())
             .collect();
 
-        mixed_actual.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        mixed_actual.sort_by(|a, b| b.total_cmp(a));
 
         assert_eq!(mixed_actual.len(), 2, "Should return exactly 2 values");
         let expected_mixed = vec![10.0, 3.0];
@@ -172,7 +173,7 @@ mod tests {
             .iter()
             .filter_map(|&[i, j]| matrix2.get([i, j]).copied())
             .collect();
-        values2.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        values2.sort_by(|a, b| b.total_cmp(a));
 
         let expected_top_4 = vec![5.0, 5.0, 3.0, 3.0];
         assert_eq!(values2, expected_top_4);
@@ -188,7 +189,7 @@ mod tests {
         for i in 0..3 {
             for j in 0..3 {
                 if let Some(val) = matrix.get_mut([i, j]) {
-                    *val = (i * 3 + j) as f64;
+                    *val = usize_to_f64(i * 3 + j);
                 }
             }
         }
@@ -196,7 +197,7 @@ mod tests {
         let result = top_k_valid_indices(&matrix, &validity, 3);
         assert_eq!(result.len(), 3);
 
-        let mut unique_indices = std::collections::HashSet::new();
+        let mut unique_indices = std::collections::BTreeSet::new();
         for &[i, j] in &result {
             unique_indices.insert([i, j]);
         }
@@ -213,7 +214,7 @@ mod tests {
         for i in 0..3 {
             for j in 0..3 {
                 if let Some(val) = matrix.get_mut([i, j]) {
-                    *val = (i * 3 + j) as f64;
+                    *val = usize_to_f64(i * 3 + j);
                 }
             }
         }
@@ -233,7 +234,7 @@ mod tests {
             .iter()
             .filter_map(|&[i, j]| matrix.get([i, j]).copied())
             .collect();
-        values.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        values.sort_by(|a, b| b.total_cmp(a));
 
         let expected = vec![5.0, 4.0, 3.0];
         assert_eq!(values, expected);

@@ -1,7 +1,5 @@
-//! Wave function collapse-inspired algorithm for pattern generation using information theory and statistical analysis
-//!
-//! The system extracts tiles from source images, analyzes their spatial relationships,
-//! and generates new patterns while maintaining statistical consistency with the source.
+//! Grows new images from the 3x3 tiles of a source image, placing them where
+//! the fewest tiles fit and matching the source's colour ratios and spacing
 
 #![forbid(unsafe_code)]
 

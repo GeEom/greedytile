@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use greedytile::algorithm::bitset::TileBitset;
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
 
     // Verifies new TileBitset is empty with count 0
     // Verified by initializing bitset with all bits set to 1
@@ -44,16 +44,16 @@ mod tests {
         assert_eq!(result, vec![3, 5]);
     }
 
-    // Tests conversion from HashSet to TileBitset
+    // Tests conversion from BTreeSet to TileBitset
     // Verified by removing the element insertion loop
     #[test]
-    fn test_from_hashset() {
-        let mut hashset = HashSet::new();
+    fn test_from_set() {
+        let mut hashset = BTreeSet::new();
         hashset.insert(1);
         hashset.insert(3);
         hashset.insert(5);
 
-        let bitset = TileBitset::from_hashset(&hashset, 10);
+        let bitset = TileBitset::from_set(&hashset, 10);
         assert!(bitset.contains(1));
         assert!(bitset.contains(3));
         assert!(bitset.contains(5));

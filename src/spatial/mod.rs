@@ -1,9 +1,4 @@
-//! Spatial data structures and grid manipulation
-//!
-//! This module contains spatial-related functionality including:
-//! - Grid manipulation and extension
-//! - Grid state management
-//! - Tile data structures and extraction
+//! The grid, its growth, and the tiles taken from a source image
 
 /// Grid extension utilities
 pub mod extension;

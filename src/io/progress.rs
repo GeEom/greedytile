@@ -6,10 +6,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-/// Coordinates progress display for batch operations
-///
-/// Automatically switches between individual progress bars (for small batches)
-/// and a single batch progress bar (for large batches) based on file count
+/// Progress bars for a batch: one per file when few, one for the batch when many
 pub struct ProgressManager {
     multi_progress: MultiProgress,
     batch_bar: Option<ProgressBar>,
@@ -40,6 +37,7 @@ static BATCH_STYLE: LazyLock<ProgressStyle> = LazyLock::new(|| {
 
 impl ProgressManager {
     /// Create a new progress manager
+    #[must_use]
     pub fn new() -> Self {
         Self {
             multi_progress: MultiProgress::new(),
@@ -50,12 +48,7 @@ impl ProgressManager {
         }
     }
 
-    /// Initialize progress bars based on file count
-    ///
-    /// # Panics
-    ///
-    /// Panics if the progress bar template is invalid (this should never happen
-    /// with the hardcoded templates used)
+    /// Set up the bars for `file_count` files
     pub fn initialize(&mut self, file_count: usize) {
         self.file_count = file_count;
 
@@ -106,11 +99,13 @@ impl ProgressManager {
     }
 
     /// Clean up all progress displays
-    pub fn finish(&self) {
+    /// # Errors
+    /// Fails when the terminal cannot be written to.
+    pub fn finish(&self) -> std::io::Result<()> {
         if let Some(ref batch_bar) = self.batch_bar {
             batch_bar.finish_with_message("All files processed");
         }
-        let _ = self.multi_progress.clear();
+        self.multi_progress.clear()
     }
 
     /// Update all progress bars to show the last N active files
@@ -124,7 +119,6 @@ impl ProgressManager {
             }
         }
 
-        // Take the last N files
         let start_idx = active_files
             .len()
             .saturating_sub(MAX_INDIVIDUAL_PROGRESS_BARS);
@@ -138,7 +132,6 @@ impl ProgressManager {
             self.file_bars.push(self.multi_progress.add(pb));
         }
 
-        // Update each progress bar
         for (bar_idx, (_file_idx, name, current, max)) in visible_files.iter().enumerate() {
             if let Some(bar) = self.file_bars.get(bar_idx) {
                 bar.set_length(*max as u64);

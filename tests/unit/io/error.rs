@@ -52,7 +52,7 @@ mod tests {
     // Tests ImageExport error with IO source
     // Verified by excluding source error from message
     #[test]
-    fn test_image_export_error() {
+    fn test_image_export_error() -> crate::TestResult {
         use std::path::PathBuf;
 
         let image_error = image::ImageError::IoError(std::io::Error::new(
@@ -69,13 +69,14 @@ mod tests {
         assert!(message.contains("/restricted/output.png"));
         assert!(error.source().is_some());
 
-        let _source_error = error.source().unwrap();
+        let _source_error = error.source().ok_or("error has no source")?;
         assert!(
             message.contains("Permission denied")
                 || message.contains("permission denied")
                 || message.contains("access denied"),
             "Error message should include source error details: {message}"
         );
+        Ok(())
     }
 
     // Tests Computation error formatting
@@ -95,7 +96,7 @@ mod tests {
     // Tests that error context properly enriches errors with position information
     // Verified by removing position context application in with_context
     #[test]
-    fn test_error_context_with_position() {
+    fn test_error_context_with_position() -> crate::TestResult {
         use greedytile::io::error::{ErrorContext, WithContext};
 
         let error = AlgorithmError::NoValidPositions {
@@ -112,41 +113,42 @@ mod tests {
 
         let enriched = std::result::Result::<(), AlgorithmError>::Err(error).with_context(context);
 
-        match enriched.unwrap_err() {
-            AlgorithmError::NoValidPositions { iteration, .. } => {
-                assert_eq!(iteration, 42);
-            }
-            _ => unreachable!("Expected NoValidPositions error"),
-        }
+        let Err(AlgorithmError::NoValidPositions { iteration, .. }) = enriched else {
+            return Err(format!("expected NoValidPositions, got {enriched:?}").into());
+        };
+        assert_eq!(iteration, 42);
+        Ok(())
     }
 
     // Tests helper functions create properly formatted errors
     // Verified by changing helper function implementations
     #[test]
-    fn test_error_helper_functions() {
+    fn test_error_helper_functions() -> crate::TestResult {
         use greedytile::io::error::{computation_error, invalid_parameter};
 
         let param_err = invalid_parameter("width", &-5, &"must be positive");
-        match param_err {
-            AlgorithmError::InvalidParameter {
-                parameter,
-                value,
-                reason,
-            } => {
-                assert_eq!(parameter, "width");
-                assert_eq!(value, "-5");
-                assert_eq!(reason, "must be positive");
-            }
-            _ => unreachable!("Expected InvalidParameter error"),
-        }
+        let AlgorithmError::InvalidParameter {
+            parameter,
+            value,
+            reason,
+        } = param_err
+        else {
+            return Err(format!("expected InvalidParameter, got {param_err:?}").into());
+        };
+        assert_eq!(parameter, "width");
+        assert_eq!(value, "-5");
+        assert_eq!(reason, "must be positive");
 
         let comp_err = computation_error("entropy calculation", &"division by zero");
-        match comp_err {
-            AlgorithmError::Computation { operation, reason } => {
-                assert_eq!(operation, "entropy calculation");
-                assert_eq!(reason, "division by zero");
-            }
-            _ => unreachable!("Expected Computation error"),
-        }
+        let AlgorithmError::Computation {
+            operation,
+            reason: comp_reason,
+        } = comp_err
+        else {
+            return Err(format!("expected Computation, got {comp_err:?}").into());
+        };
+        assert_eq!(operation, "entropy calculation");
+        assert_eq!(comp_reason, "division by zero");
+        Ok(())
     }
 }
