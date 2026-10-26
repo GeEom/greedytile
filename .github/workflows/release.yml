@@ -12,6 +12,9 @@ jobs:
   build-release:
     name: Build Release
     runs-on: ${{ matrix.os }}
+    # Overrides rust-toolchain.toml, which pins the toolchain for check.sh.
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
     permissions:
       contents: write
     strategy:

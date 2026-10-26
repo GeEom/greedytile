@@ -9,11 +9,15 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+# Each job sets RUSTUP_TOOLCHAIN to the toolchain it tests, since it overrides
+# rust-toolchain.toml, which pins the toolchain for check.sh.
 
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: stable
     steps:
     - uses: actions/checkout@v4
     
@@ -43,10 +47,30 @@ jobs:
     - name: Check benchmarks compile
       run: cargo bench --no-run
 
+  # The minimum supported Rust version, as Cargo.toml's rust-version declares
+  msrv:
+    name: MSRV (1.88)
+    runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: '1.88'
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@1.88
+
+    - name: Build
+      run: cargo build --locked --all-targets
+
+    - name: Run tests
+      run: cargo test --locked
+
   # Code coverage job
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: stable
     steps:
     - uses: actions/checkout@v4
     

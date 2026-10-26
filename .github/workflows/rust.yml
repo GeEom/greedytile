@@ -11,11 +11,15 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+# Each job sets RUSTUP_TOOLCHAIN to the toolchain it tests, since it overrides
+# rust-toolchain.toml, which pins the toolchain for check.sh.
 
 jobs:
   test:
     name: Test Suite
     runs-on: ${{ matrix.os }}
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -60,6 +64,8 @@ jobs:
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: stable
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@stable
@@ -70,6 +76,8 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: stable
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@stable
@@ -90,17 +98,20 @@ jobs:
   security:
     name: Security Audit
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: stable
     steps:
     - uses: actions/checkout@v4
     - uses: rustsec/audit-check@v1.4.1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        ignore: RUSTSEC-2024-0436  # paste crate unmaintained (transitive dependency)
 
   # Check for outdated dependencies
   outdated:
     name: Outdated Dependencies
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: stable
     if: github.event_name != 'pull_request'
     steps:
     - uses: actions/checkout@v4
