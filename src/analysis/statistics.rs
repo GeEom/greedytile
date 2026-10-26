@@ -271,31 +271,31 @@ impl Processor {
         Ok(all_interpolations)
     }
 
-    /// Blend each fit into the plain source ratio by the pattern influence distance
+    /// Blend each fit into no influence by the pattern influence distance. Far tiles
+    /// say nothing, and fading to the source ratio instead would count that prior
+    /// once for every placed neighbour.
     fn apply_locality_tapering(
         &self,
         density_interpolations: &[Vec<Cubic>],
     ) -> Vec<Vec<TaperedInterpolationFn>> {
         let pattern_influence_distance = usize_to_f64(self.pattern_influence_distance);
-        let log_ratios: Vec<f64> = self.source_ratios.iter().map(|r| r.ln()).collect();
 
         let mut tapered_interpolations: Vec<Vec<TaperedInterpolationFn>> = Vec::new();
 
         for interpolations in density_interpolations {
             let mut tapered_group: Vec<TaperedInterpolationFn> = Vec::new();
 
-            for (target_index, interpolation) in interpolations.iter().enumerate() {
+            for interpolation in interpolations {
                 let interp_clone = interpolation.clone();
-                let log_ratio = log_ratios.get(target_index).copied().unwrap_or(0.0);
                 let source_min = pattern_influence_distance;
 
                 let tapered_fn = move |x: f64| -> f64 {
                     if x <= source_min {
                         let taper = Self::locality_taper_static(x, source_min);
                         let source_val = interp_clone.evaluate(x).unwrap_or(0.0);
-                        source_val.mul_add(1.0 - taper, taper * log_ratio)
+                        source_val * (1.0 - taper)
                     } else {
-                        log_ratio
+                        0.0
                     }
                 };
 

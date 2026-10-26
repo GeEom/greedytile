@@ -15,6 +15,9 @@ use std::collections::BTreeMap;
 pub const ADJACENCY_CANDIDATES_CONSIDERED: usize = 20;
 /// How many cells the final draw picks from
 pub const CANDIDATES_CONSIDERED: usize = 15;
+/// Power on the distance probabilities in the tile draw. Neighbours' influences
+/// are multiplied as if independent; calibrated on the examples' pair statistics.
+pub const DISTANCE_WEIGHT_STRENGTH: f64 = 2.0;
 
 /// The tiles that fit at `position`. Each of its nine neighbourhoods can rule
 /// some out, and we stop as soon as none are left.
@@ -159,7 +162,7 @@ fn find_compatible_values_at_offset_bitset(
     result
 }
 
-/// What each tile type scores at `position`
+/// Each tile type's probability at `position`, normalised to sum to one
 #[must_use]
 pub fn get_tile_probabilities_at_position(
     grid_state: &GridState,
@@ -181,7 +184,15 @@ pub fn get_tile_probabilities_at_position(
         probabilities.push(prob);
     }
 
-    probabilities
+    // Stored values are unnormalised products of every nearby influence. Scale by
+    // the largest first so the sum cannot overflow.
+    let max_prob = probabilities.iter().copied().fold(0.0, f64::max);
+    if !(max_prob.is_finite() && max_prob > 0.0) {
+        let uniform = 1.0 / usize_to_f64(probabilities.len().max(1));
+        return vec![uniform; probabilities.len()];
+    }
+    let total = probabilities.iter().map(|p| p / max_prob).sum::<f64>();
+    probabilities.iter().map(|p| p / max_prob / total).collect()
 }
 
 /// Log odds for each viable tile. They lean toward the source's colour ratios
@@ -206,7 +217,7 @@ pub fn density_corrected_log_tile_weights(
     let mut viable_log_corrected = Vec::with_capacity(viable_tiles.len());
     for &tile_ref in viable_tiles {
         let prob = all_probabilities.get(tile_ref - 1).copied().unwrap_or(0.0);
-        let log_prob = prob.ln();
+        let log_prob = DISTANCE_WEIGHT_STRENGTH * prob.max(f64::MIN_POSITIVE).ln();
         let correction_val = correction.get(tile_ref - 1).copied().unwrap_or(0.0);
         viable_log_corrected.push(log_prob + correction_val);
     }

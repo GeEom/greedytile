@@ -6,7 +6,8 @@ mod tests {
     use greedytile::algorithm::cache::ViableTilesCache;
     use greedytile::algorithm::propagation::StepData;
     use greedytile::algorithm::selection::{
-        compute_viable_tiles_at_position, optimal_density_correction,
+        compute_viable_tiles_at_position, get_tile_probabilities_at_position,
+        optimal_density_correction,
     };
     use greedytile::spatial::GridState;
     use greedytile::spatial::tiles::Tile;
@@ -209,5 +210,49 @@ mod tests {
                 > corrections.get(1).copied().unwrap_or(0.0).abs(),
             "Larger deviation should produce larger correction magnitude"
         );
+    }
+
+    // Tests that stored products far outside [0, 1] come back as a distribution
+    // Verified by the density correction blowing up on raw values before normalisation
+    #[test]
+    fn test_tile_probabilities_are_normalised() {
+        let mut grid_state = GridState::new(3, 3, 3);
+        for (color, value) in [1e300, 1e-300, 3e299].into_iter().enumerate() {
+            if let Some(prob) = grid_state
+                .tile_probabilities
+                .get_mut(color)
+                .and_then(|probs| probs.get_mut([1, 1]))
+            {
+                *prob = value;
+            }
+        }
+
+        let probabilities = get_tile_probabilities_at_position(&grid_state, [1, 1], [0, 0]);
+
+        let total: f64 = probabilities.iter().sum();
+        assert!(
+            (total - 1.0).abs() < 1e-12,
+            "Should sum to one, got {total}"
+        );
+        let first = probabilities.first().copied().unwrap_or(0.0);
+        let third = probabilities.get(2).copied().unwrap_or(0.0);
+        assert!(
+            (first / third - 1e300 / 3e299).abs() < 1e-9,
+            "Should keep the stored ratios, got {probabilities:?}"
+        );
+    }
+
+    // Tests the fallback when every stored product has underflowed to zero
+    // Verified by confirming no NaN reaches the tile draw
+    #[test]
+    fn test_tile_probabilities_underflow_is_uniform() {
+        let mut grid_state = GridState::new(3, 3, 4);
+        for probs in &mut grid_state.tile_probabilities {
+            probs.fill(0.0);
+        }
+
+        let probabilities = get_tile_probabilities_at_position(&grid_state, [1, 1], [0, 0]);
+
+        assert_eq!(probabilities, vec![0.25; 4]);
     }
 }

@@ -3,8 +3,12 @@
 #[cfg(test)]
 mod tests {
     use crate::analysis::weights::top_k_valid_indices;
+    use greedytile::algorithm::propagation::StepData;
+    use greedytile::analysis::weights::calculate_position_selection;
     use greedytile::math::convert::usize_to_f64;
+    use greedytile::spatial::GridState;
     use ndarray::Array2;
+    use std::collections::BTreeMap;
 
     // Tests selection of k highest values from matrix
     // Verified by confirming that top_k_valid_indices selects the k highest values not lowest
@@ -238,5 +242,35 @@ mod tests {
 
         let expected = vec![5.0, 4.0, 3.0];
         assert_eq!(values, expected);
+    }
+
+    // Tests that unnormalised stored probabilities cannot overflow the density bias
+    // Verified by the bias exponentiating raw products to infinity before normalisation
+    #[test]
+    fn test_position_weights_finite_for_large_probabilities() {
+        let mut grid_state = GridState::new(5, 5, 2);
+        for probs in &mut grid_state.tile_probabilities {
+            probs.fill(1e300);
+        }
+        grid_state.adjacency_weights.fill(3);
+
+        let step_data = StepData {
+            source_ratios: vec![0.5, 0.5],
+            unique_cell_count: 2,
+            grid_extension_radius: 5,
+            density_correction_threshold: 0.1,
+            density_correction_steepness: 0.05,
+            density_minimum_strength: 0.1,
+            source_tiles: Vec::new(),
+            tile_compatibility_rules: BTreeMap::new(),
+        };
+
+        let result = calculate_position_selection(&grid_state, &[10, 0], &step_data, [0, 0]);
+
+        assert!(
+            result.weights.iter().all(|w| w.is_finite() && *w > 0.0),
+            "Weights should be finite and positive, got {:?}",
+            result.weights
+        );
     }
 }

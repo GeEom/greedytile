@@ -8,18 +8,18 @@ use ndarray::Array2;
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 
-/// Result of position weight calculation containing adjacency and combined weights
+/// How strongly each cell draws the next tile, and whether it may
 pub struct WeightCalculationResult {
-    /// Adjacency scores for each position
+    /// How crowded each cell is by placed neighbours
     pub adjacency: Array2<f64>,
-    /// Combined weight matrix incorporating all factors
+    /// The odds the draw gives each cell
     pub weights: Array2<f64>,
-    /// Validity matrix indicating which positions can be selected
+    /// Whether the draw may pick each cell
     pub validity: Array2<bool>,
 }
 
-/// Weight each cell up for neighbouring placed tiles and for helping the colour
-/// ratios, and down for entropy and feasibility
+/// Favour cells beside placed tiles and cells whose tiles would mend the colour
+/// ratios. Uncertain or hard-to-fill cells count for less.
 #[must_use]
 pub fn calculate_position_selection(
     grid_state: &GridState,
@@ -54,32 +54,7 @@ pub fn calculate_position_selection(
                 .exp());
     let density_bias_strength = density_bias_strength.max(step_data.density_minimum_strength);
 
-    let mut density_bias = Array2::<f64>::ones((grid_state.rows(), grid_state.cols()));
-
-    for i in 0..grid_state.rows() {
-        for j in 0..grid_state.cols() {
-            let mut dot_product = 0.0;
-            for (k, deviation) in deviations
-                .iter()
-                .enumerate()
-                .take(step_data.unique_cell_count)
-            {
-                let sign_dev = if deviation >= &0.0 { 1.0 } else { -1.0 };
-                let exp_abs_dev = deviation.abs().exp();
-                let matrix_val = grid_state
-                    .tile_probabilities
-                    .get(k)
-                    .and_then(|probs| probs.get([i, j]))
-                    .copied()
-                    .unwrap_or(0.0);
-                let term = sign_dev * exp_abs_dev * matrix_val;
-                dot_product += term;
-            }
-            if let Some(bias) = density_bias.get_mut([i, j]) {
-                *bias = density_bias_strength.mul_add(dot_product.exp(), 1.0);
-            }
-        }
-    }
+    let density_bias = density_bias_matrix(grid_state, &deviations, density_bias_strength);
 
     let mut adjacency_weight_matrix = Array2::<f64>::zeros((grid_state.rows(), grid_state.cols()));
     let mut validity_matrix =
@@ -139,7 +114,49 @@ pub fn calculate_position_selection(
     }
 }
 
-/// Apply boundary mask to mark positions outside bounds as invalid
+/// How far a tile at each cell would pull the colour ratios back to the source
+fn density_bias_matrix(
+    grid_state: &GridState,
+    deviations: &[f64],
+    density_bias_strength: f64,
+) -> Array2<f64> {
+    let mut density_bias = Array2::<f64>::ones((grid_state.rows(), grid_state.cols()));
+
+    for i in 0..grid_state.rows() {
+        for j in 0..grid_state.cols() {
+            let mut dot_product = 0.0;
+            let mut cell_total = 0.0;
+            for (k, deviation) in deviations
+                .iter()
+                .enumerate()
+                .take(grid_state.unique_cell_count)
+            {
+                let sign_dev = if deviation >= &0.0 { 1.0 } else { -1.0 };
+                let exp_abs_dev = deviation.abs().exp();
+                let matrix_val = grid_state
+                    .tile_probabilities
+                    .get(k)
+                    .and_then(|probs| probs.get([i, j]))
+                    .copied()
+                    .unwrap_or(0.0);
+                let term = sign_dev * exp_abs_dev * matrix_val;
+                dot_product += term;
+                cell_total += matrix_val;
+            }
+            // The stored probabilities are raw products and need dividing by their total
+            if cell_total.is_finite() && cell_total > 0.0 {
+                dot_product /= cell_total;
+            }
+            if let Some(bias) = density_bias.get_mut([i, j]) {
+                *bias = density_bias_strength.mul_add(dot_product.exp(), 1.0);
+            }
+        }
+    }
+
+    density_bias
+}
+
+/// Cells outside the generation bounds can never be picked
 fn apply_boundary_mask(
     validity_matrix: &mut Array2<bool>,
     bounds: &BoundingBox,

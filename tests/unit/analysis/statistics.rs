@@ -3,6 +3,9 @@
 #[cfg(test)]
 mod tests {
     use crate::analysis::statistics::SmoothKernelDistribution;
+    use greedytile::analysis::statistics::Processor;
+    use greedytile::spatial::tiles::TileExtractor;
+    use ndarray::{Array2, Array4};
 
     // Tests bounded kernel density estimation with reflection at x=0 using mathematical verification and measurable reflection effects
     // Verified by mathematical verification of reflection implementation with exact expected values
@@ -173,5 +176,35 @@ mod tests {
             pdf_at_positive > 0.0,
             "PDF at x=0.1 should be positive, got {pdf_at_positive}"
         );
+    }
+
+    // Tests that tiles beyond the influence distance leave every colour's odds alone
+    // Verified by the far field fading to the source ratio, which recounts the prior per neighbour
+    #[test]
+    fn test_far_field_influence_is_neutral() {
+        // Vertical stripes, two of colour 1 to one of colour 2
+        let source = Array2::from_shape_fn((9, 9), |(_, j)| if j % 3 == 2 { 2 } else { 1 });
+        let processor = Processor::new(source, vec![2.0 / 3.0, 1.0 / 3.0], 6, 6);
+        let sample_points = TileExtractor::calculate_exponential_sample_points(6.0);
+
+        let matrices = processor
+            .preprocess_pattern_statistics(&sample_points)
+            .unwrap_or_else(|_| Array4::zeros((2, 2, 13, 13)));
+
+        let at = |index: [usize; 4]| matrices.get(index).copied().unwrap_or(f64::NAN);
+        for from in 0..2 {
+            // The corner is ~8.5 away, the cell beside the centre 1 away
+            let far = [at([from, 0, 0, 0]), at([from, 1, 0, 0])];
+            let near = [at([from, 0, 6, 7]), at([from, 1, 6, 7])];
+            assert!(far[0] > 0.0, "Far influence should be positive");
+            assert!(
+                (far[0] / far[1] - 1.0).abs() < 1e-12,
+                "Far influence should not favour a colour, got {far:?}"
+            );
+            assert!(
+                (near[0] / near[1] - 1.0).abs() > 1e-3,
+                "Near influence should still favour a colour, got {near:?}"
+            );
+        }
     }
 }
