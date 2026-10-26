@@ -39,10 +39,10 @@ greedytile ./patterns/ -r -m -v
 | Option | Description | Default | Without Option | With Option |
 |----------|-------------|---------|----------------|-------------|
 | `--seed` | Seed reproducible generation | 42 | ![Default Seed](data/examples/seed_default_4x.png) | ![Custom Seed](data/examples/seed_custom_4x.png) |
-| `--iterations` | Maximum iterations| 1000 | ![Default Iterations](data/examples/iterations_default_4x.png) | ![More Iterations](data/examples/iterations_custom_4x.png) |
+| `--iterations` | Maximum iterations| 1000 | ![Default Iterations](data/examples/iterations_default_4x.png) | ![Fewer Iterations](data/examples/iterations_custom_4x.png) |
 | `--prefill` | Use content of `<input>_pre.png` | disabled | ![No Prefill](data/examples/prefill_off_4x.png) | ![Prefill Enabled](data/examples/prefill_on_4x.png) |
-| `--visualize`  | Generate placement animation | disabled | | ![Tile Placement Animation](data/examples/visualization_4x.gif) |
-| `--width` | Maximum pixel width | unbounded | ![Unbounded](data/examples/size_unbounded_4x.png) | ![Bounded](data/examples/size_32x32_4x.png) |
+| `--visualize`  | Generate placement animation | disabled | | ![Tile Placement Animation](data/examples/c_visualization_4x.gif) |
+| `--width` | Maximum pixel width | unbounded | ![Unbounded](data/examples/size_unbounded_4x.png) | ![Bounded](data/examples/size_24x24_4x.png) |
 | `--height` | Maximum pixel height | unbounded | | |
 | `--rotate` | Enable 90°/180°/270° tile rotations | disabled | ![No Rotation](data/examples/rotate_off_4x.png) | ![Rotation Enabled](data/examples/rotate_on_4x.png) |
 | `--mirror`| Enable tile reflection | disabled | ![No Mirror](data/examples/mirror_off_4x.png) | ![Mirror Enabled](data/examples/mirror_on_4x.png) |
@@ -61,8 +61,6 @@ GreedyTile generates patterns by placing 3×3 tiles extracted from a source imag
 ## Commentary
 
 For efficiency, the global balance correction uses a normal distribution to approximate what should technically be a binomial distribution. The approximation becomes accurate at large counts where it matters most.
-
-The distance probability weighting has more impact on easily tiled patterns than complex ones. Restrictive patterns often have less valid tile choices, making the probabilistic selection less relevant.
 
 ## Limitations
 
