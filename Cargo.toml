@@ -1,8 +1,8 @@
 [package]
 name = "greedytile"
 version = "0.2.0"
-edition = "2024"
-rust-version = "1.88"
+edition.workspace = true
+rust-version.workspace = true
 authors = ["David Gathercole"]
 description = "Random greedy pixel pattern generation algorithm"
 homepage = "https://github.com/GeEom/greedytile"
@@ -47,7 +47,16 @@ opt-level = 3
 lto = "fat"
 debug = false
 
-[lints.rust]
+[lints]
+workspace = true
+
+[workspace]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.88"
+
+[workspace.lints.rust]
 # groups — priority -1, or clippy's lint_groups_priority fails an allow below
 rust_2024_compatibility = { level = "deny", priority = -1 }
 future_incompatible     = { level = "deny", priority = -1 }
@@ -56,8 +65,9 @@ rust_2018_idioms        = { level = "deny", priority = -1 }
 unused                  = { level = "deny", priority = -1 }
 missing_docs            = "deny"
 unsafe_code             = "deny"
+unsafe_op_in_unsafe_fn  = "deny"
 
-[lints.clippy]
+[workspace.lints.clippy]
 # groups — priority -1 so specific lines can override
 correctness = { level = "deny", priority = -1 }
 suspicious  = { level = "deny", priority = -1 }
@@ -97,6 +107,9 @@ let_underscore_untyped          = "deny"
 print_stdout                    = "deny"
 print_stderr                    = "deny"
 unused_result_ok                = "deny"
+undocumented_unsafe_blocks      = "deny"
+multiple_unsafe_ops_per_block   = "deny"
+iter_over_hash_type             = "deny"
 # the only permitted allows
 module_name_repetitions = "allow"
 similar_names           = "allow"
